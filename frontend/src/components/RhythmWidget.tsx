@@ -195,7 +195,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
 
-  const stepTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const stepTimerRef = useRef<any | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Sync state with incoming initialData

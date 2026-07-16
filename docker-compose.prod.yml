@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: bass_lesson_db_prod
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: production_secure_db_pass # In production, replace with secure secrets via env files
+      POSTGRES_DB: bass_lessons
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bass_lessons"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: bass_lesson_backend_prod
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:production_secure_db_pass@db:5432/bass_lessons
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - VITE_API_URL=/api
+    container_name: bass_lesson_frontend_prod
+    ports:
+      - "80:80" # Standard web port for production access
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  pgdata_prod:

@@ -1,0 +1,29 @@
+# Stage 1: Build the backend TypeScript
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+RUN npm run build
+
+# Stage 2: Production runtime environment
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+# Only install production dependencies to keep the container lightweight
+RUN npm install --only=production
+
+# Copy compiled JavaScript output
+COPY --from=build /app/dist ./dist
+
+EXPOSE 3001
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+CMD ["npm", "start"]

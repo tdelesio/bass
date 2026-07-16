@@ -72,7 +72,7 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
   const [playbackBpm, setPlaybackBpm] = useState(100);
   const [loopPlayback, setLoopToggle] = useState(false);
 
-  const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const playbackTimerRef = useRef<any | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Get string notes based on selected tuning
