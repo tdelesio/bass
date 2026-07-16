@@ -383,8 +383,8 @@ app.post('/api/restore', async (req: Request, res: Response) => {
     // Restore Song Parts
     for (const part of song_parts) {
       await client.query(
-        'INSERT INTO song_parts (id, song_id, part_type, order_index, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)',
-        [part.id, part.song_id, part.part_type, part.order_index, part.created_at, part.updated_at]
+        'INSERT INTO song_parts (id, song_id, part_type, order_index, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [part.id, part.song_id, part.part_type, part.order_index, part.created_at]
       );
     }
 
