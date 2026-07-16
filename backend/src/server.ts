@@ -397,16 +397,6 @@ app.post('/api/restore', async (req: Request, res: Response) => {
       );
     }
 
-    // Reset auto-increment sequences in PostgreSQL
-    if (songs.length > 0) {
-      await client.query("SELECT setval(pg_get_serial_sequence('songs', 'id'), COALESCE(MAX(id), 1)) FROM songs");
-    }
-    if (song_parts.length > 0) {
-      await client.query("SELECT setval(pg_get_serial_sequence('song_parts', 'id'), COALESCE(MAX(id), 1)) FROM song_parts");
-    }
-    if (widgets.length > 0) {
-      await client.query("SELECT setval(pg_get_serial_sequence('widgets', 'id'), COALESCE(MAX(id), 1)) FROM widgets");
-    }
 
     await client.query('COMMIT');
     res.json({ 
