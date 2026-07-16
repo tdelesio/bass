@@ -15,12 +15,87 @@ const pool = new Pool({
   connectionString: databaseUrl,
 });
 
+async function initializeDatabaseSchema() {
+  try {
+    console.log('🔄 Checking and initializing database schema...');
+    
+    // Create UUID extension
+    await pool.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+    
+    // Create custom types safely
+    await pool.query(`
+      DO $$ BEGIN
+          CREATE TYPE part_type_enum AS ENUM (
+              'Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Hook', 'Bridge', 'Outro', 'Solo', 'Interlude'
+          );
+      EXCEPTION
+          WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    await pool.query(`
+      DO $$ BEGIN
+          CREATE TYPE widget_type_enum AS ENUM (
+              'fret_board', 'note', 'rhythm', 'roman_numeral'
+          );
+      EXCEPTION
+          WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    // Create tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS songs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          title VARCHAR(255) NOT NULL,
+          artist VARCHAR(255) NOT NULL,
+          tuning VARCHAR(100) DEFAULT 'Standard (EADG)' NOT NULL,
+          key_signature VARCHAR(100) DEFAULT 'C Major' NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS song_parts (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+          part_type part_type_enum NOT NULL,
+          order_index INT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT unique_song_part UNIQUE (song_id, part_type, order_index)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS widgets (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          part_id UUID NOT NULL REFERENCES song_parts(id) ON DELETE CASCADE,
+          widget_type widget_type_enum NOT NULL,
+          order_index INT NOT NULL,
+          data JSONB NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create indices
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_widgets_part_id ON widgets(part_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_song_parts_song_id ON song_parts(song_id)');
+
+    console.log('✅ Database schema initialized successfully!');
+  } catch (err) {
+    console.error('❌ Failed to initialize database schema:', err);
+  }
+}
+
 // Test connection and execute initial verification
-pool.query('SELECT NOW()', (err, res) => {
+pool.query('SELECT NOW()', async (err, res) => {
   if (err) {
     console.error('❌ Database connection error:', err);
   } else {
     console.log('✅ Database connected successfully at:', res.rows[0].now);
+    await initializeDatabaseSchema();
   }
 });
 
