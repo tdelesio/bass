@@ -76,8 +76,13 @@ export default function App() {
   const [newTuning, setNewTuning] = useState('Standard (EADG)');
   const [newKey, setNewKey] = useState('C Major');
 
-  // Backend API URI base
-  const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001') + '/api';
+  // Backend API URI base (self-correcting for dev/prod proxy boundaries)
+  const getApiBase = () => {
+    const url = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    if (url.endsWith('/api')) return url;
+    return url + '/api';
+  };
+  const API_BASE = getApiBase();
 
   // Load all songs initially
   useEffect(() => {
