@@ -136,6 +136,46 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
   const resizeStartMouseX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(0);
 
+  // Drag and Drop (reorder) states & handlers
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    if (resizeIndex !== null) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', idx.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) return;
+
+    // Do not drag/drop carriage returns to maintain row integrity
+    if (progression[draggedIdx].numeral === '\n' || progression[targetIdx].numeral === '\n') {
+      setDraggedIdx(null);
+      return;
+    }
+
+    const updated = [...progression];
+    const [draggedItem] = updated.splice(draggedIdx, 1);
+    updated.splice(targetIdx, 0, draggedItem);
+
+    setDraggedIdx(null);
+    saveWidgetState(updated, lineRepeats);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+  };
+
   // References to always hold the freshest state to prevent stale dragging closures
   const progressionRef = useRef<ChordItem[]>(progression);
   const lineRepeatsRef = useRef<Record<number, number>>(lineRepeats);
@@ -570,7 +610,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                           const isRest = item.numeral === 'REST';
                           const matchingDegree = !isRest ? (diatonicChords.find(d => d.numeral === item.numeral) 
                             || accidentalChords.find(d => d.numeral === item.numeral)) : null;
-                          const chordName = isRest ? 'Rest' : (matchingDegree ? matchingDegree.chord : '?');
+                          const chordName = isRest ? '' : (matchingDegree ? matchingDegree.chord : '?');
 
                           const durationMeta = DURATION_METADATA[item.duration] || DURATION_METADATA['1/4'];
                           accumulatedBeats += durationMeta.beats;
@@ -581,13 +621,21 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                           return (
                             <React.Fragment key={originalIdx}>
                               <div
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, originalIdx)}
+                                onDragOver={(e) => handleDragOver(e, originalIdx)}
+                                onDrop={(e) => handleDrop(e, originalIdx)}
+                                onDragEnd={handleDragEnd}
                                 style={{
                                   display: 'flex',
                                   flexDirection: 'column',
                                   alignItems: 'center',
                                   gap: '3px',
                                   width: `${durationMeta.width}px`,
-                                  flexShrink: 0
+                                  flexShrink: 0,
+                                  cursor: 'grab',
+                                  opacity: draggedIdx === originalIdx ? 0.35 : 1,
+                                  transition: 'opacity 0.2s ease'
                                 }}
                               >
                                 {/* Chord/Note Name above the box */}
