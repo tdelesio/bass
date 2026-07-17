@@ -554,129 +554,153 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
 
                           return (
                             <React.Fragment key={originalIdx}>
-                              {/* Ultra-compact chord card block with dragging resizer */}
-                              <div 
-                                onClick={() => toggleOctaveShift(originalIdx)}
-                                title="Single click = Toggle Octave (Hover 1s for delete button)"
+                              <div
                                 style={{
-                                  width: `${durationMeta.width}px`,
-                                  background: item.octave 
-                                    ? 'rgba(234, 179, 8, 0.08)' 
-                                    : 'rgba(99, 102, 241, 0.08)',
-                                  border: item.octave
-                                    ? '1px solid rgba(234, 179, 8, 0.35)'
-                                    : '1px solid rgba(99, 102, 241, 0.25)',
-                                  boxShadow: item.octave
-                                    ? '0 0 10px rgba(234, 179, 8, 0.05)'
-                                    : '0 0 10px rgba(99, 102, 241, 0.03)',
-                                  padding: durationMeta.width < 50 ? '0.15rem 0.1rem' : '0.3rem 0.25rem',
-                                  borderRadius: 'var(--radius-sm)',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   alignItems: 'center',
-                                  justifyContent: 'center',
-                                  position: 'relative',
-                                  cursor: 'pointer',
-                                  userSelect: 'none',
-                                  height: '42px',
-                                  flexShrink: 0,
-                                  transition: 'border-color 0.15s ease, background 0.15s ease'
+                                  gap: '3px',
+                                  width: `${durationMeta.width}px`,
+                                  flexShrink: 0
                                 }}
-                                className="progression-block"
                               >
-                                {/* Floating delete button appearing on 1s hover */}
-                                <button
-                                  className="chord-delete-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // Avoid triggering octave shift click
-                                    deleteNumeralAtIndex(originalIdx);
-                                  }}
-                                  title="Delete this chord card"
-                                  style={{
-                                    position: 'absolute',
-                                    top: '-6px',
-                                    right: '-6px',
-                                    background: 'var(--accent-red)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '50%',
-                                    width: '14px',
-                                    height: '14px',
-                                    fontSize: '0.5rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                                    zIndex: 10,
-                                    padding: 0,
-                                    lineHeight: 1
+                                {/* Roman Numeral indicator above the box */}
+                                <div 
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    gap: '2px',
+                                    width: '100%',
+                                    height: '14px'
                                   }}
                                 >
-                                  ✕
-                                </button>
-
-                                {/* Compact Labels */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.1rem', width: '100%' }}>
                                   <span style={{ 
-                                    fontSize: durationMeta.width < 30 ? '0.62rem' : (durationMeta.width < 50 ? '0.72rem' : '0.85rem'), 
-                                    fontWeight: 700, 
-                                    color: 'var(--text-main)', 
+                                    fontSize: '0.68rem', 
+                                    fontWeight: 800, 
+                                    color: item.octave ? 'var(--secondary)' : 'var(--text-main)', 
+                                    textTransform: 'uppercase',
                                     lineHeight: 1 
                                   }}>
                                     {item.numeral}
                                   </span>
                                   {item.octave && (
                                     <span style={{ 
-                                      fontSize: durationMeta.width < 30 ? '0.45rem' : '0.55rem', 
+                                      fontSize: '0.5rem', 
                                       fontWeight: 'bold', 
                                       color: 'var(--secondary)',
                                       lineHeight: 1
                                     }}>
-                                      {durationMeta.width < 50 ? '•' : '8va'}
+                                      +1
                                     </span>
                                   )}
                                 </div>
-                                
-                                {durationMeta.width >= 30 && (
-                                  <span style={{ fontSize: durationMeta.width < 50 ? '0.52rem' : '0.65rem', color: 'var(--text-muted)', lineHeight: 1, marginTop: '0.1rem' }}>
+
+                                {/* The Card Box itself */}
+                                <div 
+                                  onClick={() => toggleOctaveShift(originalIdx)}
+                                  title="Single click = Toggle Octave (Hover 1s for delete button)"
+                                  style={{
+                                    width: '100%',
+                                    background: item.octave 
+                                      ? 'rgba(234, 179, 8, 0.08)' 
+                                      : 'rgba(99, 102, 241, 0.08)',
+                                    border: item.octave
+                                      ? '1px solid rgba(234, 179, 8, 0.35)'
+                                      : '1px solid rgba(99, 102, 241, 0.25)',
+                                    boxShadow: item.octave
+                                      ? '0 0 10px rgba(234, 179, 8, 0.05)'
+                                      : '0 0 10px rgba(99, 102, 241, 0.03)',
+                                    padding: '0.2rem 0.15rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative',
+                                    cursor: 'pointer',
+                                    userSelect: 'none',
+                                    height: '32px',
+                                    transition: 'border-color 0.15s ease, background 0.15s ease'
+                                  }}
+                                  className="progression-block"
+                                >
+                                  {/* Floating delete button appearing on 1s hover */}
+                                  <button
+                                    className="chord-delete-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Avoid triggering octave shift click
+                                      deleteNumeralAtIndex(originalIdx);
+                                    }}
+                                    title="Delete this chord card"
+                                    style={{
+                                      position: 'absolute',
+                                      top: '-6px',
+                                      right: '-6px',
+                                      background: 'var(--accent-red)',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '50%',
+                                      width: '14px',
+                                      height: '14px',
+                                      fontSize: '0.5rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                                      zIndex: 10,
+                                      padding: 0,
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+
+                                  {/* Centered Chord/Note Name inside the box */}
+                                  <span style={{ 
+                                    fontSize: durationMeta.width < 50 ? '0.72rem' : '0.85rem', 
+                                    fontWeight: 800, 
+                                    color: 'var(--secondary)', 
+                                    lineHeight: 1 
+                                  }}>
                                     {chordName}
                                   </span>
-                                )}
 
-                                {/* Floating duration micro-badge */}
-                                {durationMeta.width >= 30 && (
-                                  <span style={{ 
-                                    position: 'absolute', 
-                                    bottom: '2px', 
-                                    right: '4px', 
-                                    fontSize: durationMeta.width < 50 ? '0.45rem' : '0.5rem', 
-                                    color: 'var(--text-dim)', 
-                                    fontWeight: 'bold' 
-                                  }}>
-                                    {durationMeta.label}
-                                  </span>
-                                )}
+                                  {/* Floating duration micro-badge */}
+                                  {durationMeta.width >= 35 && (
+                                    <span style={{ 
+                                      position: 'absolute', 
+                                      bottom: '2px', 
+                                      right: '4px', 
+                                      fontSize: '0.45rem', 
+                                      color: 'var(--text-dim)', 
+                                      fontWeight: 'bold' 
+                                    }}>
+                                      {durationMeta.label}
+                                    </span>
+                                  )}
 
-                                {/* Translucent Right-Edge Drag-To-Resize Handle */}
-                                <div 
-                                  onMouseDown={(e) => handleResizeStart(e, originalIdx, item.duration)}
-                                  onTouchStart={(e) => handleResizeStart(e, originalIdx, item.duration)}
-                                  style={{
-                                    position: 'absolute',
-                                    right: 0,
-                                    top: 0,
-                                    bottom: 0,
-                                    width: durationMeta.width < 50 ? '6px' : '10px',
-                                    cursor: 'ew-resize',
-                                    background: 'linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.08) 100%)',
-                                    borderTopRightRadius: 'var(--radius-sm)',
-                                    borderBottomRightRadius: 'var(--radius-sm)',
-                                    zIndex: 5
-                                  }}
-                                  className="resize-handle"
-                                  onClick={(e) => e.stopPropagation()} // Prevent triggering octave shift click
-                                />
+                                  {/* Translucent Right-Edge Drag-To-Resize Handle */}
+                                  <div 
+                                    onMouseDown={(e) => handleResizeStart(e, originalIdx, item.duration)}
+                                    onTouchStart={(e) => handleResizeStart(e, originalIdx, item.duration)}
+                                    style={{
+                                      position: 'absolute',
+                                      right: 0,
+                                      top: 0,
+                                      bottom: 0,
+                                      width: durationMeta.width < 50 ? '6px' : '10px',
+                                      cursor: 'ew-resize',
+                                      background: 'linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.08) 100%)',
+                                      borderTopRightRadius: 'var(--radius-sm)',
+                                      borderBottomRightRadius: 'var(--radius-sm)',
+                                      zIndex: 5
+                                    }}
+                                    className="resize-handle"
+                                    onClick={(e) => e.stopPropagation()} // Prevent triggering octave shift click
+                                  />
+                                </div>
                               </div>
 
                               {/* Automated Full Bar space separator and vertical divider line */}
@@ -686,12 +710,12 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     margin: '0 0.5rem', 
-                                    height: '38px',
+                                    height: '48px',
                                     flexShrink: 0 
                                   }}
                                 >
                                   {/* Beautiful vertical score bar divider and empty spacer space */}
-                                  <div style={{ width: '1.5px', height: '32px', background: 'rgba(255,255,255,0.12)' }} />
+                                  <div style={{ width: '1.5px', height: '36px', background: 'rgba(255,255,255,0.12)' }} />
                                 </div>
                               )}
                             </React.Fragment>
