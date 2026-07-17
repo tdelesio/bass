@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CornerDownLeft, Repeat } from 'lucide-react';
+import { CornerDownLeft, Repeat, Pause } from 'lucide-react';
 
 interface ChordItem {
   numeral: string; // "I", "ii", "iii", or "\n"
@@ -193,7 +193,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
     if (resizeIndex !== null) return;
 
     const updated = [...progression];
-    if (updated[idx].numeral === '\n') return;
+    if (updated[idx].numeral === '\n' || updated[idx].numeral === 'REST') return;
     
     updated[idx] = {
       ...updated[idx],
@@ -442,6 +442,31 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
             <CornerDownLeft size={16} />
             <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>New Line</span>
           </button>
+
+          {/* Rest Button */}
+          <button
+            onClick={() => addNumeral('REST')}
+            title="Insert a Rest (silence/pause card of any size)"
+            style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px dashed var(--accent-red)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.5rem 0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.25rem',
+              transition: 'all 0.15s ease',
+              minWidth: '70px',
+              color: 'var(--accent-red)'
+            }}
+            className="rest-btn"
+          >
+            <Pause size={16} />
+            <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Add Rest</span>
+          </button>
         </div>
 
         {/* Interactive Accidental / Chromatic Scale Reference Blocks */}
@@ -542,9 +567,10 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>Empty Line Block</span>
                       ) : (
                         line.items.map(({ item, originalIdx }, chordIdx) => {
-                          const matchingDegree = diatonicChords.find(d => d.numeral === item.numeral) 
-                            || accidentalChords.find(d => d.numeral === item.numeral);
-                          const chordName = matchingDegree ? matchingDegree.chord : '?';
+                          const isRest = item.numeral === 'REST';
+                          const matchingDegree = !isRest ? (diatonicChords.find(d => d.numeral === item.numeral) 
+                            || accidentalChords.find(d => d.numeral === item.numeral)) : null;
+                          const chordName = isRest ? 'Rest' : (matchingDegree ? matchingDegree.chord : '?');
 
                           const durationMeta = DURATION_METADATA[item.duration] || DURATION_METADATA['1/4'];
                           accumulatedBeats += durationMeta.beats;
@@ -577,7 +603,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   <span style={{ 
                                     fontSize: '0.68rem', 
                                     fontWeight: 800, 
-                                    color: 'var(--text-main)', 
+                                    color: isRest ? 'var(--accent-red)' : 'var(--text-main)', 
                                     lineHeight: 1 
                                   }}>
                                     {chordName}
@@ -590,15 +616,21 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   title="Single click = Toggle Octave (Hover 1s for delete button)"
                                   style={{
                                     width: '100%',
-                                    background: item.octave 
-                                      ? 'rgba(234, 179, 8, 0.08)' 
-                                      : 'rgba(99, 102, 241, 0.08)',
-                                    border: item.octave
-                                      ? '1px solid rgba(234, 179, 8, 0.35)'
-                                      : '1px solid rgba(99, 102, 241, 0.25)',
-                                    boxShadow: item.octave
-                                      ? '0 0 10px rgba(234, 179, 8, 0.05)'
-                                      : '0 0 10px rgba(99, 102, 241, 0.03)',
+                                    background: isRest
+                                      ? 'rgba(239, 68, 68, 0.04)'
+                                      : (item.octave 
+                                        ? 'rgba(234, 179, 8, 0.08)' 
+                                        : 'rgba(99, 102, 241, 0.08)'),
+                                    border: isRest
+                                      ? '1px dashed rgba(239, 68, 68, 0.25)'
+                                      : (item.octave
+                                        ? '1px solid rgba(234, 179, 8, 0.35)'
+                                        : '1px solid rgba(99, 102, 241, 0.25)'),
+                                    boxShadow: isRest
+                                      ? '0 0 10px rgba(239, 68, 68, 0.01)'
+                                      : (item.octave
+                                        ? '0 0 10px rgba(234, 179, 8, 0.05)'
+                                        : '0 0 10px rgba(99, 102, 241, 0.03)'),
                                     padding: '0.2rem 0.15rem',
                                     borderRadius: 'var(--radius-sm)',
                                     display: 'flex',
@@ -648,14 +680,14 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   {/* Centered Roman Numeral inside the box */}
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
                                     <span style={{ 
-                                      fontSize: durationMeta.width < 50 ? '0.72rem' : '0.85rem', 
+                                      fontSize: isRest ? '1.1rem' : (durationMeta.width < 50 ? '0.72rem' : '0.85rem'), 
                                       fontWeight: 800, 
-                                      color: 'var(--secondary)', 
+                                      color: isRest ? 'var(--accent-red)' : 'var(--secondary)', 
                                       lineHeight: 1 
                                     }}>
-                                      {item.numeral}
+                                      {isRest ? '𝄾' : item.numeral}
                                     </span>
-                                    {item.octave && (
+                                    {!isRest && item.octave && (
                                       <span style={{ 
                                         fontSize: '0.55rem', 
                                         fontWeight: 'bold', 
@@ -674,7 +706,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                       bottom: '2px', 
                                       right: '4px', 
                                       fontSize: '0.45rem', 
-                                      color: 'var(--text-dim)', 
+                                      color: isRest ? 'rgba(239,68,68,0.4)' : 'var(--text-dim)', 
                                       fontWeight: 'bold' 
                                     }}>
                                       {durationMeta.label}
