@@ -564,13 +564,12 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   flexShrink: 0
                                 }}
                               >
-                                {/* Roman Numeral indicator above the box */}
+                                {/* Chord/Note Name above the box */}
                                 <div 
                                   style={{ 
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     justifyContent: 'center', 
-                                    gap: '2px',
                                     width: '100%',
                                     height: '14px'
                                   }}
@@ -578,22 +577,11 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   <span style={{ 
                                     fontSize: '0.68rem', 
                                     fontWeight: 800, 
-                                    color: item.octave ? 'var(--secondary)' : 'var(--text-main)', 
-                                    textTransform: 'uppercase',
+                                    color: 'var(--text-main)', 
                                     lineHeight: 1 
                                   }}>
-                                    {item.numeral}
+                                    {chordName}
                                   </span>
-                                  {item.octave && (
-                                    <span style={{ 
-                                      fontSize: '0.5rem', 
-                                      fontWeight: 'bold', 
-                                      color: 'var(--secondary)',
-                                      lineHeight: 1
-                                    }}>
-                                      +1
-                                    </span>
-                                  )}
                                 </div>
 
                                 {/* The Card Box itself */}
@@ -657,15 +645,27 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     ✕
                                   </button>
 
-                                  {/* Centered Chord/Note Name inside the box */}
-                                  <span style={{ 
-                                    fontSize: durationMeta.width < 50 ? '0.72rem' : '0.85rem', 
-                                    fontWeight: 800, 
-                                    color: 'var(--secondary)', 
-                                    lineHeight: 1 
-                                  }}>
-                                    {chordName}
-                                  </span>
+                                  {/* Centered Roman Numeral inside the box */}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                    <span style={{ 
+                                      fontSize: durationMeta.width < 50 ? '0.72rem' : '0.85rem', 
+                                      fontWeight: 800, 
+                                      color: 'var(--secondary)', 
+                                      lineHeight: 1 
+                                    }}>
+                                      {item.numeral}
+                                    </span>
+                                    {item.octave && (
+                                      <span style={{ 
+                                        fontSize: '0.55rem', 
+                                        fontWeight: 'bold', 
+                                        color: 'var(--secondary)',
+                                        lineHeight: 1
+                                      }}>
+                                        +1
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {/* Floating duration micro-badge */}
                                   {durationMeta.width >= 35 && (
