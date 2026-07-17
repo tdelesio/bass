@@ -687,16 +687,6 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     }}>
                                       {isRest ? '𝄾' : item.numeral}
                                     </span>
-                                    {!isRest && item.octave && (
-                                      <span style={{ 
-                                        fontSize: '0.55rem', 
-                                        fontWeight: 'bold', 
-                                        color: 'var(--secondary)',
-                                        lineHeight: 1
-                                      }}>
-                                        +1
-                                      </span>
-                                    )}
                                   </div>
 
                                   {/* Floating duration micro-badge */}

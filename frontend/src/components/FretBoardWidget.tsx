@@ -106,6 +106,9 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
         audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
 
       // Create Web Audio nodes
       const osc = ctx.createOscillator();
@@ -187,6 +190,18 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
     stopPlayback();
     setIsPlaying(true);
     setIsRecording(false);
+
+    // Warm up and activate AudioContext on direct user tap event for mobile/phone browsers
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+    } catch (e) {
+      console.warn('AudioContext touchstart activation failed:', e);
+    }
 
     let currentIndex = 0;
     const intervalMs = (60 / playbackBpm) * 1000;
