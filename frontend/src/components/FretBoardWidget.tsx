@@ -16,6 +16,7 @@ interface FretBoardWidgetProps {
     notes?: FretNote[];
   };
   onSave: (data: { notes: FretNote[] }) => void;
+  isPlayMode?: boolean;
 }
 
 // Map chromatic scale
@@ -64,7 +65,7 @@ const calculateFrequency = (baseMidi: number, fret: number): number => {
   return 440 * Math.pow(2, (midi - 69) / 12);
 };
 
-export default function FretBoardWidget({ widgetId, tuning, initialData, onSave }: FretBoardWidgetProps) {
+export default function FretBoardWidget({ widgetId, tuning, initialData, onSave, isPlayMode }: FretBoardWidgetProps) {
   const [notes, setNotes] = useState<FretNote[]>(initialData.notes || []);
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -142,8 +143,15 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
   // Handles clicking a fret node: always appends to sequence to support note repetition
   const handleFretClick = (stringIdx: number, fretIndex: number) => {
     const baseMidi = stringBases[stringIdx - 1];
-    const noteName = calculateNoteName(baseMidi, fretIndex);
     const frequency = calculateFrequency(baseMidi, fretIndex);
+
+    // Play synthesized audio tone
+    playNoteAudio(frequency);
+
+    // If we are in play mode, do not append to sequence or save changes
+    if (isPlayMode) return;
+
+    const noteName = calculateNoteName(baseMidi, fretIndex);
 
     // Create new note at the end of the sequence
     const newSequence = notes.length + 1;
@@ -154,9 +162,6 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
       sequence: newSequence,
       noteName,
     };
-
-    // Play synthesized audio tone
-    playNoteAudio(frequency);
 
     saveChanges([...notes, newNote]);
   };
@@ -368,10 +373,12 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
             </button>
           )}
 
-          <button className={`btn ${isRecording ? 'btn-danger' : 'btn-secondary'}`} onClick={toggleRecording}>
-            <Circle size={14} fill={isRecording ? 'var(--accent-red)' : 'transparent'} /> 
-            {isRecording ? 'Recording Note sequence' : 'Record Mode'}
-          </button>
+          {!isPlayMode && (
+            <button className={`btn ${isRecording ? 'btn-danger' : 'btn-secondary'}`} onClick={toggleRecording}>
+              <Circle size={14} fill={isRecording ? 'var(--accent-red)' : 'transparent'} /> 
+              {isRecording ? 'Recording Note sequence' : 'Record Mode'}
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -400,9 +407,11 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave 
             Loop
           </label>
 
-          <button className="btn btn-secondary btn-icon" onClick={clearFretboard} title="Clear Fretboard">
-            <Trash2 size={16} />
-          </button>
+          {!isPlayMode && (
+            <button className="btn btn-secondary btn-icon" onClick={clearFretboard} title="Clear Fretboard">
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
 

@@ -22,6 +22,7 @@ interface RomanNumeralWidgetProps {
     progression: ChordItem[]; 
     lineRepeats: Record<number, number> 
   }) => void;
+  isPlayMode?: boolean;
 }
 
 const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -125,7 +126,7 @@ const normalizeProgression = (prog: any[]): ChordItem[] => {
   });
 };
 
-export default function RomanNumeralWidget({ widgetId, songKey, initialData, onSave }: RomanNumeralWidgetProps) {
+export default function RomanNumeralWidget({ widgetId, songKey, initialData, onSave, isPlayMode }: RomanNumeralWidgetProps) {
   const [key, setKey] = useState(initialData.key || songKey || 'C');
   const [scale, setScale] = useState(initialData.scale || 'major');
   const [progression, setProgression] = useState<ChordItem[]>(normalizeProgression(initialData.progression || []));
@@ -366,194 +367,200 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
 
   return (
     <div className="roman-numeral-widget" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Root Selector Row */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        flexWrap: 'wrap',
-        padding: '0.5rem',
-        background: 'rgba(255,255,255,0.01)',
-        borderRadius: 'var(--radius-md)'
-      }}>
-        {/* Key signature selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Scale Root:</span>
-          <select
-            value={key}
-            onChange={(e) => handleKeyOrScaleChange(e.target.value, scale)}
-            className="input-field"
-            style={{ width: '80px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
-          >
-            {KEYS.map(k => <option key={k} value={k}>{k}</option>)}
-          </select>
-          {songKey && key !== songKey && (
-            <button 
-              className="btn btn-secondary" 
-              style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
-              onClick={() => handleKeyOrScaleChange(songKey, scale)}
-              title="Reset scale root to match active Song Key"
-            >
-              Reset to Song Key ({songKey})
-            </button>
-          )}
-        </div>
-
-        {/* Scale/Quality selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Quality:</span>
-          <select
-            value={scale}
-            onChange={(e) => handleKeyOrScaleChange(key, e.target.value)}
-            className="input-field"
-            style={{ width: '100px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
-          >
-            <option value="major">Major (Ionian)</option>
-            <option value="minor">Natural Minor</option>
-          </select>
-        </div>
-
-        <button 
-          className="btn btn-secondary" 
-          style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }} 
-          onClick={clearProgression}
-        >
-          Clear Progression
-        </button>
-      </div>
-
-      {/* Interactive Diatonic Scale Reference Blocks + Line Break Button */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scale Degrees (Click to construct progression):</span>
-        <div style={{
-          display: 'flex',
-          gap: '0.4rem',
-          alignItems: 'stretch',
-          width: '100%',
-          overflowX: 'auto',
-          paddingBottom: '0.25rem'
-        }}>
-          {diatonicChords.map(({ numeral, chord }) => (
-            <button
-              key={numeral}
-              onClick={() => addNumeral(numeral)}
-              style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.5rem',
-                minWidth: '54px',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.25rem',
-                transition: 'all 0.15s ease',
-                flex: 1
-              }}
-              className="interactive-scale-degree"
-            >
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>{numeral}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-main)' }}>{chord}</span>
-            </button>
-          ))}
-
-          {/* New Line / Carriage Return Button */}
-          <button
-            onClick={addCarriageReturn}
-            title="Insert a Carriage Return (starts a new row of chords)"
-            style={{
-              background: 'rgba(6, 182, 212, 0.08)',
-              border: '1px dashed var(--secondary)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem 0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.15s ease',
-              minWidth: '70px',
-              color: 'var(--secondary)'
-            }}
-            className="carriage-return-btn"
-          >
-            <CornerDownLeft size={16} />
-            <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>New Line</span>
-          </button>
-
-          {/* Rest Button */}
-          <button
-            onClick={() => addNumeral('REST')}
-            title="Insert a Rest (silence/pause card of any size)"
-            style={{
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px dashed var(--accent-red)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem 0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.25rem',
-              transition: 'all 0.15s ease',
-              minWidth: '70px',
-              color: 'var(--accent-red)'
-            }}
-            className="rest-btn"
-          >
-            <Pause size={16} />
-            <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Add Rest</span>
-          </button>
-        </div>
-
-        {/* Interactive Accidental / Chromatic Scale Reference Blocks */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.1rem' }}>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Accidental / Chromatic Degrees:</span>
+      {!isPlayMode && (
+        <>
+          {/* Root Selector Row */}
           <div style={{
             display: 'flex',
-            gap: '0.4rem',
-            alignItems: 'stretch',
-            width: '100%',
-            overflowX: 'auto',
-            paddingBottom: '0.25rem'
+            alignItems: 'center',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+            padding: '0.5rem',
+            background: 'rgba(255,255,255,0.01)',
+            borderRadius: 'var(--radius-md)'
           }}>
-            {accidentalChords.map(({ numeral, chord }) => (
+            {/* Key signature selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Scale Root:</span>
+              <select
+                value={key}
+                onChange={(e) => handleKeyOrScaleChange(e.target.value, scale)}
+                className="input-field"
+                style={{ width: '80px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+              >
+                {KEYS.map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+              {songKey && key !== songKey && (
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                  onClick={() => handleKeyOrScaleChange(songKey, scale)}
+                  title="Reset scale root to match active Song Key"
+                >
+                  Reset to Song Key ({songKey})
+                </button>
+              )}
+            </div>
+
+            {/* Scale/Quality selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Quality:</span>
+              <select
+                value={scale}
+                onChange={(e) => handleKeyOrScaleChange(key, e.target.value)}
+                className="input-field"
+                style={{ width: '100px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+              >
+                <option value="major">Major (Ionian)</option>
+                <option value="minor">Natural Minor</option>
+              </select>
+            </div>
+
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }} 
+              onClick={clearProgression}
+            >
+              Clear Progression
+            </button>
+          </div>
+
+          {/* Interactive Diatonic Scale Reference Blocks + Line Break Button */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scale Degrees (Click to construct progression):</span>
+            <div style={{
+              display: 'flex',
+              gap: '0.4rem',
+              alignItems: 'stretch',
+              width: '100%',
+              overflowX: 'auto',
+              paddingBottom: '0.25rem'
+            }}>
+              {diatonicChords.map(({ numeral, chord }) => (
+                <button
+                  key={numeral}
+                  onClick={() => addNumeral(numeral)}
+                  style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.5rem',
+                    minWidth: '54px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    transition: 'all 0.15s ease',
+                    flex: 1
+                  }}
+                  className="interactive-scale-degree"
+                >
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>{numeral}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-main)' }}>{chord}</span>
+                </button>
+              ))}
+
+              {/* New Line / Carriage Return Button */}
               <button
-                key={numeral}
-                onClick={() => addNumeral(numeral)}
+                onClick={addCarriageReturn}
+                title="Insert a Carriage Return (starts a new row of chords)"
                 style={{
-                  background: 'rgba(234, 179, 8, 0.02)', // subtle amber tint
-                  border: '1px solid rgba(234, 179, 8, 0.12)', // subtle amber border
+                  background: 'rgba(6, 182, 212, 0.08)',
+                  border: '1px dashed var(--secondary)',
                   borderRadius: 'var(--radius-sm)',
-                  padding: '0.45rem',
-                  minWidth: '54px',
+                  padding: '0.5rem 0.75rem',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: '0.2rem',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
                   transition: 'all 0.15s ease',
-                  flex: 1
+                  minWidth: '70px',
+                  color: 'var(--secondary)'
                 }}
-                className="interactive-accidental-degree"
-                title={`Click to add non-diatonic ${numeral} (${chord}) chord`}
+                className="carriage-return-btn"
               >
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#eab308' }}>{numeral}</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{chord}</span>
+                <CornerDownLeft size={16} />
+                <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>New Line</span>
               </button>
-            ))}
-            {/* Empty space-separator to align with the "New Line" button above */}
-            <div style={{ minWidth: '70px', flex: 0 }} />
+
+              {/* Rest Button */}
+              <button
+                onClick={() => addNumeral('REST')}
+                title="Insert a Rest (silence/pause card of any size)"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px dashed var(--accent-red)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.5rem 0.75rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
+                  transition: 'all 0.15s ease',
+                  minWidth: '70px',
+                  color: 'var(--accent-red)'
+                }}
+                className="rest-btn"
+              >
+                <Pause size={16} />
+                <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Add Rest</span>
+              </button>
+            </div>
+
+            {/* Interactive Accidental / Chromatic Scale Reference Blocks */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.1rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Accidental / Chromatic Degrees:</span>
+              <div style={{
+                display: 'flex',
+                gap: '0.4rem',
+                alignItems: 'stretch',
+                width: '100%',
+                overflowX: 'auto',
+                paddingBottom: '0.25rem'
+              }}>
+                {accidentalChords.map(({ numeral, chord }) => (
+                  <button
+                    key={numeral}
+                    onClick={() => addNumeral(numeral)}
+                    style={{
+                      background: 'rgba(234, 179, 8, 0.02)', // subtle amber tint
+                      border: '1px solid rgba(234, 179, 8, 0.12)', // subtle amber border
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.45rem',
+                      minWidth: '54px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.2rem',
+                      transition: 'all 0.15s ease',
+                      flex: 1
+                    }}
+                    className="interactive-accidental-degree"
+                    title={`Click to add non-diatonic ${numeral} (${chord}) chord`}
+                  >
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#eab308' }}>{numeral}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{chord}</span>
+                  </button>
+                ))}
+                {/* Empty space-separator to align with the "New Line" button above */}
+                <div style={{ minWidth: '70px', flex: 0 }} />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Generated Progression Output Card display arranged by carriage returns */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Progression Sheets (Single click = octave, Double click = delete):</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {isPlayMode ? "Your Progression Sheets:" : "Your Progression Sheets (Single click = octave, Double click = delete):"}
+        </span>
         <div style={{
           padding: '1.25rem',
           background: 'rgba(10, 12, 20, 0.4)',
@@ -621,11 +628,11 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                           return (
                             <React.Fragment key={originalIdx}>
                               <div
-                                draggable={true}
-                                onDragStart={(e) => handleDragStart(e, originalIdx)}
-                                onDragOver={(e) => handleDragOver(e, originalIdx)}
-                                onDrop={(e) => handleDrop(e, originalIdx)}
-                                onDragEnd={handleDragEnd}
+                                draggable={!isPlayMode}
+                                onDragStart={isPlayMode ? undefined : (e) => handleDragStart(e, originalIdx)}
+                                onDragOver={isPlayMode ? undefined : (e) => handleDragOver(e, originalIdx)}
+                                onDrop={isPlayMode ? undefined : (e) => handleDrop(e, originalIdx)}
+                                onDragEnd={isPlayMode ? undefined : handleDragEnd}
                                 style={{
                                   display: 'flex',
                                   flexDirection: 'column',
@@ -633,7 +640,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   gap: '3px',
                                   width: `${durationMeta.width}px`,
                                   flexShrink: 0,
-                                  cursor: 'grab',
+                                  cursor: isPlayMode ? 'default' : 'grab',
                                   opacity: draggedIdx === originalIdx ? 0.35 : 1,
                                   transition: 'opacity 0.2s ease'
                                 }}
@@ -660,8 +667,8 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
 
                                 {/* The Card Box itself */}
                                 <div 
-                                  onClick={() => toggleOctaveShift(originalIdx)}
-                                  title="Single click = Toggle Octave (Hover 1s for delete button)"
+                                  onClick={isPlayMode ? undefined : () => toggleOctaveShift(originalIdx)}
+                                  title={isPlayMode ? undefined : "Single click = Toggle Octave (Hover 1s for delete button)"}
                                   style={{
                                     width: '100%',
                                     background: isRest
@@ -686,7 +693,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     position: 'relative',
-                                    cursor: 'pointer',
+                                    cursor: isPlayMode ? 'default' : 'pointer',
                                     userSelect: 'none',
                                     height: '32px',
                                     transition: 'border-color 0.15s ease, background 0.15s ease'
@@ -694,36 +701,38 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   className="progression-block"
                                 >
                                   {/* Floating delete button appearing on 1s hover */}
-                                  <button
-                                    className="chord-delete-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation(); // Avoid triggering octave shift click
-                                      deleteNumeralAtIndex(originalIdx);
-                                    }}
-                                    title="Delete this chord card"
-                                    style={{
-                                      position: 'absolute',
-                                      top: '-6px',
-                                      right: '-6px',
-                                      background: 'var(--accent-red)',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '50%',
-                                      width: '14px',
-                                      height: '14px',
-                                      fontSize: '0.5rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: 'pointer',
-                                      boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                                      zIndex: 10,
-                                      padding: 0,
-                                      lineHeight: 1
-                                    }}
-                                  >
-                                    ✕
-                                  </button>
+                                  {!isPlayMode && (
+                                    <button
+                                      className="chord-delete-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Avoid triggering octave shift click
+                                        deleteNumeralAtIndex(originalIdx);
+                                      }}
+                                      title="Delete this chord card"
+                                      style={{
+                                        position: 'absolute',
+                                        top: '-6px',
+                                        right: '-6px',
+                                        background: 'var(--accent-red)',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '50%',
+                                        width: '14px',
+                                        height: '14px',
+                                        fontSize: '0.55rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                                        zIndex: 10,
+                                        padding: 0,
+                                        lineHeight: 1
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
 
                                   {/* Centered Roman Numeral inside the box */}
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
@@ -752,24 +761,26 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   )}
 
                                   {/* Translucent Right-Edge Drag-To-Resize Handle */}
-                                  <div 
-                                    onMouseDown={(e) => handleResizeStart(e, originalIdx, item.duration)}
-                                    onTouchStart={(e) => handleResizeStart(e, originalIdx, item.duration)}
-                                    style={{
-                                      position: 'absolute',
-                                      right: 0,
-                                      top: 0,
-                                      bottom: 0,
-                                      width: durationMeta.width < 50 ? '6px' : '10px',
-                                      cursor: 'ew-resize',
-                                      background: 'linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.08) 100%)',
-                                      borderTopRightRadius: 'var(--radius-sm)',
-                                      borderBottomRightRadius: 'var(--radius-sm)',
-                                      zIndex: 5
-                                    }}
-                                    className="resize-handle"
-                                    onClick={(e) => e.stopPropagation()} // Prevent triggering octave shift click
-                                  />
+                                  {!isPlayMode && (
+                                    <div 
+                                      onMouseDown={(e) => handleResizeStart(e, originalIdx, item.duration)}
+                                      onTouchStart={(e) => handleResizeStart(e, originalIdx, item.duration)}
+                                      style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: durationMeta.width < 50 ? '6px' : '10px',
+                                        cursor: 'ew-resize',
+                                        background: 'linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.08) 100%)',
+                                        borderTopRightRadius: 'var(--radius-sm)',
+                                        borderBottomRightRadius: 'var(--radius-sm)',
+                                        zIndex: 5
+                                      }}
+                                      className="resize-handle"
+                                      onClick={(e) => e.stopPropagation()} // Prevent triggering octave shift click
+                                    />
+                                  )}
                                 </div>
                               </div>
 

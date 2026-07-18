@@ -70,6 +70,17 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNewSongModalOpen, setIsNewSongModalOpen] = useState(false);
 
+  // Play Mode practicer states
+  const [isPlayMode, setIsPlayMode] = useState(false);
+  const [activePlayWidgetType, setActivePlayWidgetType] = useState<'roman_numeral' | 'fret_board' | 'rhythm' | 'note'>('roman_numeral');
+
+  const handleTogglePlayMode = (playModeOn: boolean) => {
+    setIsPlayMode(playModeOn);
+    if (playModeOn) {
+      setIsSidebarCollapsed(true);
+    }
+  };
+
   // Form states
   const [newTitle, setNewTitle] = useState('');
   const [newArtist, setNewArtist] = useState('');
@@ -531,6 +542,50 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Segmented Mode Control */}
+              <div style={{
+                display: 'flex',
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '3px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                marginRight: '1rem',
+                marginLeft: 'auto'
+              }}>
+                <button
+                  onClick={() => handleTogglePlayMode(false)}
+                  style={{
+                    background: !isPlayMode ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                    color: !isPlayMode ? 'var(--primary)' : 'var(--text-muted)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Edit Mode
+                </button>
+                <button
+                  onClick={() => handleTogglePlayMode(true)}
+                  style={{
+                    background: isPlayMode ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                    color: isPlayMode ? 'var(--primary)' : 'var(--text-muted)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Play Mode
+                </button>
+              </div>
+
               {/* Reload Button */}
               <button className="btn btn-secondary btn-icon" onClick={() => fetchSongDetails(selectedSongId!)} title="Sync database">
                 <RefreshCw size={15} />
@@ -539,195 +594,358 @@ export default function App() {
 
             {/* Workbench Content */}
             <div className="workbench-content">
-              {/* Parts Navigation Bar */}
-              <div className="parts-navigation">
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600, marginRight: '0.5rem', textTransform: 'uppercase' }}>Parts:</span>
-                {selectedSong.parts.map((p) => (
-                  <button 
-                    key={p.id}
-                    className={`part-tab ${activePartId === p.id ? 'active' : ''}`}
-                    onClick={() => setActivePartId(p.id)}
-                  >
-                    {p.part_type}
-                  </button>
-                ))}
-
-                {/* Add new part toolbar drop-out */}
-                <div style={{ position: 'relative', display: 'inline-block', marginLeft: 'auto' }}>
-                  <select 
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAddPart(e.target.value);
-                        e.target.value = '';
-                      }
-                    }}
-                    className="input-field"
-                    style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', width: '130px', cursor: 'pointer' }}
-                  >
-                    <option value="" disabled>+ Add Song Part</option>
-                    {PART_TYPES.filter(type => !selectedSong.parts.some(p => p.part_type === type)).map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Active Part content area */}
-              {currentPart ? (
-                <section className="part-section">
-                  <div className="part-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div 
-                      onClick={() => setCollapsedParts(prev => ({ ...prev, [currentPart.id]: !prev[currentPart.id] }))}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', userSelect: 'none' }}
-                      title={collapsedParts[currentPart.id] ? "Expand Part Content" : "Collapse Part Content"}
+              {/* Parts Navigation Bar or Play Mode Switcher */}
+              {!isPlayMode ? (
+                <div className="parts-navigation">
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600, marginRight: '0.5rem', textTransform: 'uppercase' }}>Parts:</span>
+                  {selectedSong.parts.map((p) => (
+                    <button 
+                      key={p.id}
+                      className={`part-tab ${activePartId === p.id ? 'active' : ''}`}
+                      onClick={() => setActivePartId(p.id)}
                     >
-                      <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px', padding: 0 }}>
-                        <ChevronRight 
-                          size={14} 
-                          style={{ 
-                            transform: collapsedParts[currentPart.id] ? 'rotate(0deg)' : 'rotate(90deg)', 
-                            transition: 'transform 0.2s ease' 
-                          }} 
-                        />
-                      </button>
-                      <h3 className="part-title-label" style={{ margin: 0 }}>{currentPart.part_type} Content</h3>
-                    </div>
-                    <button className="btn btn-danger" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleDeletePart(currentPart.id)}>
-                      <Trash2 size={12} /> Delete Part
+                      {p.part_type}
                     </button>
-                  </div>
+                  ))}
 
-                  {/* Render Widgets sequentially if not collapsed */}
-                  {!collapsedParts[currentPart.id] ? (
-                    <>
-                      {currentPart.widgets.length === 0 ? (
+                  {/* Add new part toolbar drop-out */}
+                  <div style={{ position: 'relative', display: 'inline-block', marginLeft: 'auto' }}>
+                    <select 
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleAddPart(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="input-field"
+                      style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', width: '130px', cursor: 'pointer' }}
+                    >
+                      <option value="" disabled>+ Add Song Part</option>
+                      {PART_TYPES.filter(type => !selectedSong.parts.some(p => p.part_type === type)).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                /* Play Mode Switcher */
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  marginBottom: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  padding: '4px',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid rgba(255,255,255,0.04)',
+                  overflowX: 'auto',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600, paddingLeft: '0.5rem', textTransform: 'uppercase', flexShrink: 0 }}>Practice View:</span>
+                  {[
+                    { type: 'roman_numeral', label: 'Roman Chord Map', icon: <Hash size={14} /> },
+                    { type: 'fret_board', label: 'Fret Board Graph', icon: <Layers3 size={14} /> },
+                    { type: 'rhythm', label: 'Rhythm Sequencer', icon: <Activity size={14} /> },
+                    { type: 'note', label: 'Notes Notepad', icon: <FileText size={14} /> }
+                  ].map((btn) => (
+                    <button
+                      key={btn.type}
+                      onClick={() => setActivePlayWidgetType(btn.type as any)}
+                      style={{
+                        background: activePlayWidgetType === btn.type ? 'rgba(99,102,241,0.15)' : 'transparent',
+                        color: activePlayWidgetType === btn.type ? 'var(--primary)' : 'var(--text-muted)',
+                        border: activePlayWidgetType === btn.type ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '0.4rem 0.8rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {btn.icon}
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Workbench main workspace (conditional Edit/Play) */}
+              {!isPlayMode ? (
+                /* Edit Mode Workspace content area */
+                currentPart ? (
+                  <section className="part-section">
+                    <div className="part-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div 
+                        onClick={() => setCollapsedParts(prev => ({ ...prev, [currentPart.id]: !prev[currentPart.id] }))}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', userSelect: 'none' }}
+                        title={collapsedParts[currentPart.id] ? "Expand Part Content" : "Collapse Part Content"}
+                      >
+                        <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px', padding: 0 }}>
+                          <ChevronRight 
+                            size={14} 
+                            style={{ 
+                              transform: collapsedParts[currentPart.id] ? 'rotate(0deg)' : 'rotate(90deg)', 
+                              transition: 'transform 0.2s ease' 
+                            }} 
+                          />
+                        </button>
+                        <h3 className="part-title-label" style={{ margin: 0 }}>{currentPart.part_type} Content</h3>
+                      </div>
+                      <button className="btn btn-danger" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleDeletePart(currentPart.id)}>
+                        <Trash2 size={12} /> Delete Part
+                      </button>
+                    </div>
+
+                    {/* Render Widgets sequentially if not collapsed */}
+                    {!collapsedParts[currentPart.id] ? (
+                      <>
+                        {currentPart.widgets.length === 0 ? (
+                          <div style={{
+                            padding: '3rem 1.5rem',
+                            textAlign: 'center',
+                            border: '1px dashed rgba(255,255,255,0.06)',
+                            borderRadius: 'var(--radius-lg)',
+                            color: 'var(--text-muted)'
+                          }}>
+                            <Layers style={{ strokeWidth: 1.5, marginBottom: '0.75rem', color: 'var(--primary)' }} />
+                            <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>This part has no widgets yet. Let's add standard lesson tools below!</p>
+                          </div>
+                        ) : (
+                          currentPart.widgets.map((widget) => {
+                            const meta = getWidgetTypeLabel(widget.widget_type);
+                            return (
+                              <div key={widget.id} className="glass-card widget-card">
+                                <div className="widget-header">
+                                  <span className="widget-title">
+                                    {meta.icon}
+                                    {meta.name}
+                                  </span>
+                                  <div className="widget-actions">
+                                    <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px' }} onClick={() => handleDeleteWidget(widget.id)}>
+                                      <Trash2 size={13} style={{ color: 'var(--accent-red)' }} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Dynamic components binding */}
+                                {widget.widget_type === 'fret_board' && (
+                                  <FretBoardWidget 
+                                    widgetId={widget.id}
+                                    tuning={selectedSong.tuning}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'note' && (
+                                  <NoteWidget 
+                                    widgetId={widget.id}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'rhythm' && (
+                                  <RhythmWidget 
+                                    widgetId={widget.id}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'roman_numeral' && (
+                                  <RomanNumeralWidget 
+                                    widgetId={widget.id}
+                                    songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+
+                        {/* Widget Creation Toolbar */}
+                        <div className="widget-creator-toolbar">
+                          <span className="widget-creator-title">+ ADD LESSON WIDGET</span>
+                          <div className="widget-btn-group">
+                            <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'fret_board')}>
+                              <Layers3 size={14} style={{ color: 'var(--primary)' }} /> Fret Board Graph
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'note')}>
+                              <FileText size={14} style={{ color: 'var(--accent-purple)' }} /> Notes Notepad
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'rhythm')}>
+                              <Activity size={14} style={{ color: 'var(--secondary)' }} /> Rhythm Sequencer
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'roman_numeral')}>
+                              <Hash size={14} style={{ color: 'var(--accent-green)' }} /> Roman Chord Map
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{
+                        padding: '2rem 1.5rem',
+                        textAlign: 'center',
+                        background: 'rgba(255,255,255,0.01)',
+                        borderRadius: 'var(--radius-lg)',
+                        border: '1px dashed rgba(255,255,255,0.03)',
+                        color: 'var(--text-dim)',
+                        fontSize: '0.85rem'
+                      }}>
+                        <Layers style={{ strokeWidth: 1, width: '28px', height: '28px', color: 'var(--primary)', marginBottom: '0.5rem', opacity: 0.5 }} />
+                        <p style={{ margin: 0 }}>This song part content is collapsed to save space.</p>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ marginTop: '0.75rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
+                          onClick={() => setCollapsedParts(prev => ({ ...prev, [currentPart.id]: false }))}
+                        >
+                          Expand Widgets Stack
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <div style={{
+                    padding: '5rem 2rem',
+                    textAlign: 'center',
+                    background: 'rgba(255,255,255,0.01)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px dashed rgba(255,255,255,0.05)',
+                    color: 'var(--text-muted)'
+                  }}>
+                    <Layers style={{ strokeWidth: 1, width: '48px', height: '48px', color: 'var(--primary)', marginBottom: '1.25rem' }} />
+                    <h4 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Song Parts Created</h4>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '380px', margin: '0 auto' }}>To begin learning, choose or add a song section like an Intro or Verse from the upper bar.</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+                      {PART_TYPES.slice(0, 4).map(type => (
+                        <button key={type} className="btn btn-secondary" onClick={() => handleAddPart(type)}>
+                          + {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              ) : (
+                /* Play Mode Workspace: tabless continuous vertical parts stack for active widget type */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  {(() => {
+                    const partsWithActiveWidgets = selectedSong.parts.filter(part => 
+                      part.widgets.some(w => w.widget_type === activePlayWidgetType)
+                    );
+
+                    if (partsWithActiveWidgets.length === 0) {
+                      const widgetLabels = {
+                        roman_numeral: 'Roman Chord Map',
+                        fret_board: 'Fret Board Graph',
+                        rhythm: 'Rhythm Sequencer',
+                        note: 'Notes Notepad'
+                      };
+                      return (
                         <div style={{
-                          padding: '3rem 1.5rem',
+                          padding: '5rem 2rem',
                           textAlign: 'center',
-                          border: '1px dashed rgba(255,255,255,0.06)',
+                          background: 'rgba(255,255,255,0.01)',
                           borderRadius: 'var(--radius-lg)',
+                          border: '1px dashed rgba(255,255,255,0.05)',
                           color: 'var(--text-muted)'
                         }}>
-                          <Layers style={{ strokeWidth: 1.5, marginBottom: '0.75rem', color: 'var(--primary)' }} />
-                          <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>This part has no widgets yet. Let's add standard lesson tools below!</p>
+                          <Layers style={{ strokeWidth: 1, width: '48px', height: '48px', color: 'var(--primary)', marginBottom: '1.25rem' }} />
+                          <h4 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>No {widgetLabels[activePlayWidgetType]}s</h4>
+                          <p style={{ fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '380px', margin: '0 auto' }}>
+                            This song doesn't contain any {widgetLabels[activePlayWidgetType]} widgets yet. Switch back to Edit Mode to build some!
+                          </p>
                         </div>
-                      ) : (
-                        currentPart.widgets.map((widget) => {
-                          const meta = getWidgetTypeLabel(widget.widget_type);
-                          return (
-                            <div key={widget.id} className="glass-card widget-card">
-                              <div className="widget-header">
-                                <span className="widget-title">
-                                  {meta.icon}
-                                  {meta.name}
-                                </span>
-                                <div className="widget-actions">
-                                  <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px' }} onClick={() => handleDeleteWidget(widget.id)}>
-                                    <Trash2 size={13} style={{ color: 'var(--accent-red)' }} />
-                                  </button>
-                                </div>
+                      );
+                    }
+
+                    return partsWithActiveWidgets.map(part => {
+                      const matchingWidgets = part.widgets.filter(w => w.widget_type === activePlayWidgetType);
+                      return (
+                        <div key={part.id} className="play-part-section" style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '1.25rem',
+                          background: 'rgba(15, 20, 35, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.04)',
+                          borderRadius: 'var(--radius-lg)',
+                          padding: '1.5rem',
+                          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
+                          backdropFilter: 'blur(8px)'
+                        }}>
+                          {/* Beautiful Part Header Header */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                            paddingBottom: '0.75rem',
+                            marginBottom: '0.25rem'
+                          }}>
+                            <div style={{
+                              width: '8px',
+                              height: '16px',
+                              borderRadius: '4px',
+                              background: 'var(--primary)'
+                            }} />
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>{part.part_type}</h3>
+                          </div>
+
+                          {/* Matching Widgets continuous list */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {matchingWidgets.map(widget => (
+                              <div key={widget.id} className="play-widget-wrapper">
+                                {widget.widget_type === 'fret_board' && (
+                                  <FretBoardWidget 
+                                    widgetId={widget.id}
+                                    tuning={selectedSong.tuning}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    isPlayMode={true}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'note' && (
+                                  <NoteWidget 
+                                    widgetId={widget.id}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    isPlayMode={true}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'rhythm' && (
+                                  <RhythmWidget 
+                                    widgetId={widget.id}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    isPlayMode={true}
+                                  />
+                                )}
+
+                                {widget.widget_type === 'roman_numeral' && (
+                                  <RomanNumeralWidget 
+                                    widgetId={widget.id}
+                                    songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
+                                    initialData={widget.data || {}}
+                                    onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    isPlayMode={true}
+                                  />
+                                )}
                               </div>
-
-                              {/* Dynamic components binding */}
-                              {widget.widget_type === 'fret_board' && (
-                                <FretBoardWidget 
-                                  widgetId={widget.id}
-                                  tuning={selectedSong.tuning}
-                                  initialData={widget.data || {}}
-                                  onSave={(data) => handleSaveWidgetData(widget.id, data)}
-                                />
-                              )}
-
-                              {widget.widget_type === 'note' && (
-                                <NoteWidget 
-                                  widgetId={widget.id}
-                                  initialData={widget.data || {}}
-                                  onSave={(data) => handleSaveWidgetData(widget.id, data)}
-                                />
-                              )}
-
-                              {widget.widget_type === 'rhythm' && (
-                                <RhythmWidget 
-                                  widgetId={widget.id}
-                                  initialData={widget.data || {}}
-                                  onSave={(data) => handleSaveWidgetData(widget.id, data)}
-                                />
-                              )}
-
-                              {widget.widget_type === 'roman_numeral' && (
-                                <RomanNumeralWidget 
-                                  widgetId={widget.id}
-                                  songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
-                                  initialData={widget.data || {}}
-                                  onSave={(data) => handleSaveWidgetData(widget.id, data)}
-                                />
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-
-                      {/* Widget Creation Toolbar */}
-                      <div className="widget-creator-toolbar">
-                        <span className="widget-creator-title">+ ADD LESSON WIDGET</span>
-                        <div className="widget-btn-group">
-                          <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'fret_board')}>
-                            <Layers3 size={14} style={{ color: 'var(--primary)' }} /> Fret Board Graph
-                          </button>
-                          <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'note')}>
-                            <FileText size={14} style={{ color: 'var(--accent-purple)' }} /> Notes Notepad
-                          </button>
-                          <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'rhythm')}>
-                            <Activity size={14} style={{ color: 'var(--secondary)' }} /> Rhythm Sequencer
-                          </button>
-                          <button className="btn btn-secondary" onClick={() => handleAddWidget(currentPart.id, 'roman_numeral')}>
-                            <Hash size={14} style={{ color: 'var(--accent-green)' }} /> Roman Chord Map
-                          </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{
-                      padding: '2rem 1.5rem',
-                      textAlign: 'center',
-                      background: 'rgba(255,255,255,0.01)',
-                      borderRadius: 'var(--radius-lg)',
-                      border: '1px dashed rgba(255,255,255,0.03)',
-                      color: 'var(--text-dim)',
-                      fontSize: '0.85rem'
-                    }}>
-                      <Layers style={{ strokeWidth: 1, width: '28px', height: '28px', color: 'var(--primary)', marginBottom: '0.5rem', opacity: 0.5 }} />
-                      <p style={{ margin: 0 }}>This song part content is collapsed to save space.</p>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ marginTop: '0.75rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
-                        onClick={() => setCollapsedParts(prev => ({ ...prev, [currentPart.id]: false }))}
-                      >
-                        Expand Widgets Stack
-                      </button>
-                    </div>
-                  )}
-                </section>
-              ) : (
-                <div style={{
-                  padding: '5rem 2rem',
-                  textAlign: 'center',
-                  background: 'rgba(255,255,255,0.01)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px dashed rgba(255,255,255,0.05)',
-                  color: 'var(--text-muted)'
-                }}>
-                  <Layers style={{ strokeWidth: 1, width: '48px', height: '48px', color: 'var(--primary)', marginBottom: '1.25rem' }} />
-                  <h4 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Song Parts Created</h4>
-                  <p style={{ fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '380px', margin: '0 auto' }}>To begin learning, choose or add a song section like an Intro or Verse from the upper bar.</p>
-                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-                    {PART_TYPES.slice(0, 4).map(type => (
-                      <button key={type} className="btn btn-secondary" onClick={() => handleAddPart(type)}>
-                        + {type}
-                      </button>
-                    ))}
-                  </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>

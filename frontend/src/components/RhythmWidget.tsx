@@ -22,6 +22,7 @@ interface RhythmWidgetProps {
     beats: boolean[];
     items: RhythmItem[];
   }) => void;
+  isPlayMode?: boolean;
 }
 
 const DURATION_BEATS: Record<string, number> = {
@@ -178,7 +179,7 @@ const renderRhythmIcon = (type: 'note' | 'rest', duration: string, size = 22, co
   return null;
 };
 
-export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWidgetProps) {
+export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode }: RhythmWidgetProps) {
   const [timeSignature, setTimeSignature] = useState(initialData.timeSignature || '4/4');
   const [tempo, setTempo] = useState(initialData.tempo || 100);
   const [subdivisions, setSubdivisions] = useState(initialData.subdivisions || 4);
@@ -401,7 +402,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
             {isPlaying ? 'Stop Beat' : 'Play Beat'}
           </button>
 
-          {items.length > 0 && (
+          {!isPlayMode && items.length > 0 && (
             <button className="btn btn-secondary" onClick={clearRhythm} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
               <Trash2 size={13} style={{ color: 'var(--accent-red)' }} />
               Clear Grid
@@ -424,127 +425,131 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
         </div>
       </div>
 
-      {/* Measure Capacity Interactive Progress Tracker */}
-      <div style={{
-        padding: '0.75rem 1rem',
-        background: 'rgba(255,255,255,0.015)',
-        border: '1px solid rgba(255,255,255,0.03)',
-        borderRadius: 'var(--radius-md)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.4rem'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)' }}>
-            Measure Capacity Progress:
-          </span>
-          <span style={{ 
-            fontSize: '0.85rem', 
-            fontWeight: 'bold', 
-            color: totalSixteenths === 16 ? 'var(--primary)' : 'var(--text-main)',
-            filter: totalSixteenths === 16 ? 'drop-shadow(0 0 6px var(--primary-glow))' : 'none',
-            transition: 'all 0.2s ease'
-          }}>
-            {getSimplestFraction(totalSixteenths)} {totalSixteenths === 16 ? 'Whole Note (Measure Full! 🏆)' : '/ 1 Whole Note'}
-          </span>
-        </div>
-        
-        {/* Progress Track */}
-        <div style={{
-          width: '100%',
-          height: '6px',
-          background: 'rgba(255,255,255,0.03)',
-          borderRadius: '3px',
-          overflow: 'hidden'
-        }}>
+      {!isPlayMode && (
+        <>
+          {/* Measure Capacity Interactive Progress Tracker */}
           <div style={{
-            width: `${(totalSixteenths / 16) * 100}%`,
-            height: '100%',
-            background: totalSixteenths === 16 
-              ? 'linear-gradient(90deg, var(--primary) 0%, #10b981 100%)' 
-              : 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
-            boxShadow: totalSixteenths === 16 ? '0 0 8px #10b981' : 'none',
-            borderRadius: '3px',
-            transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease'
-          }} />
-        </div>
-      </div>
-
-      {/* Rhythmic construction blocks builder */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.6rem',
-        padding: '1rem',
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px solid rgba(255,255,255,0.04)',
-        borderRadius: 'var(--radius-md)'
-      }}>
-        {/* Notes Line */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span style={{ width: '85px', fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add Note:</span>
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-            {(['1/16', '1/8', '1/4', '1/2', '1'] as const).map((d) => {
-              const color = RHYTHM_COLORS.note[d];
-              return (
-                <button 
-                  key={d} 
-                  onClick={() => addRhythmItem('note', d)}
-                  className="btn btn-secondary rhythm-add-btn"
-                  style={{ 
-                    padding: '0.4rem 0.75rem', 
-                    fontSize: '0.75rem', 
-                    background: 'rgba(255, 255, 255, 0.02)', 
-                    borderColor: 'rgba(255, 255, 255, 0.06)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem'
-                  }}
-                  title={`Add ${DURATION_LABELS[d]} Note`}
-                >
-                  <div style={{ color }}>
-                    {renderRhythmIcon('note', d, 16, color)}
-                  </div>
-                  <span style={{ color: 'var(--text-main)' }}>{DURATION_LABELS[d]}</span>
-                </button>
-              );
-            })}
+            padding: '0.75rem 1rem',
+            background: 'rgba(255,255,255,0.015)',
+            border: '1px solid rgba(255,255,255,0.03)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.4rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)' }}>
+                Measure Capacity Progress:
+              </span>
+              <span style={{ 
+                fontSize: '0.85rem', 
+                fontWeight: 'bold', 
+                color: totalSixteenths === 16 ? 'var(--primary)' : 'var(--text-main)',
+                filter: totalSixteenths === 16 ? 'drop-shadow(0 0 6px var(--primary-glow))' : 'none',
+                transition: 'all 0.2s ease'
+              }}>
+                {getSimplestFraction(totalSixteenths)} {totalSixteenths === 16 ? 'Whole Note (Measure Full! 🏆)' : '/ 1 Whole Note'}
+              </span>
+            </div>
+            
+            {/* Progress Track */}
+            <div style={{
+              width: '100%',
+              height: '6px',
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: '3px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${(totalSixteenths / 16) * 100}%`,
+                height: '100%',
+                background: totalSixteenths === 16 
+                  ? 'linear-gradient(90deg, var(--primary) 0%, #10b981 100%)' 
+                  : 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
+                boxShadow: totalSixteenths === 16 ? '0 0 8px #10b981' : 'none',
+                borderRadius: '3px',
+                transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease'
+              }} />
+            </div>
           </div>
-        </div>
 
-        {/* Rests Line */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span style={{ width: '85px', fontSize: '0.72rem', color: 'var(--secondary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add Rest:</span>
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-            {(['1/16', '1/8', '1/4', '1/2', '1'] as const).map((d) => {
-              const color = RHYTHM_COLORS.rest[d];
-              return (
-                <button 
-                  key={d} 
-                  onClick={() => addRhythmItem('rest', d)}
-                  className="btn btn-secondary rhythm-add-btn"
-                  style={{ 
-                    padding: '0.4rem 0.75rem', 
-                    fontSize: '0.75rem', 
-                    background: 'rgba(255, 255, 255, 0.02)', 
-                    borderColor: 'rgba(255, 255, 255, 0.05)',
-                    borderStyle: 'dashed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem'
-                  }}
-                  title={`Add ${DURATION_LABELS[d]} Rest`}
-                >
-                  <div style={{ color }}>
-                    {renderRhythmIcon('rest', d, 16, color)}
-                  </div>
-                  <span style={{ color: 'var(--text-dim)' }}>{DURATION_LABELS[d]}</span>
-                </button>
-              );
-            })}
+          {/* Rhythmic construction blocks builder */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.6rem',
+            padding: '1rem',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 'var(--radius-md)'
+          }}>
+            {/* Notes Line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <span style={{ width: '85px', fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add Note:</span>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {(['1/16', '1/8', '1/4', '1/2', '1'] as const).map((d) => {
+                  const color = RHYTHM_COLORS.note[d];
+                  return (
+                    <button 
+                      key={d} 
+                      onClick={() => addRhythmItem('note', d)}
+                      className="btn btn-secondary rhythm-add-btn"
+                      style={{ 
+                        padding: '0.4rem 0.75rem', 
+                        fontSize: '0.75rem', 
+                        background: 'rgba(255, 255, 255, 0.02)', 
+                        borderColor: 'rgba(255, 255, 255, 0.06)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem'
+                      }}
+                      title={`Add ${DURATION_LABELS[d]} Note`}
+                    >
+                      <div style={{ color }}>
+                        {renderRhythmIcon('note', d, 16, color)}
+                      </div>
+                      <span style={{ color: 'var(--text-main)' }}>{DURATION_LABELS[d]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Rests Line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <span style={{ width: '85px', fontSize: '0.72rem', color: 'var(--secondary)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add Rest:</span>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {(['1/16', '1/8', '1/4', '1/2', '1'] as const).map((d) => {
+                  const color = RHYTHM_COLORS.rest[d];
+                  return (
+                    <button 
+                      key={d} 
+                      onClick={() => addRhythmItem('rest', d)}
+                      className="btn btn-secondary rhythm-add-btn"
+                      style={{ 
+                        padding: '0.4rem 0.75rem', 
+                        fontSize: '0.75rem', 
+                        background: 'rgba(255, 255, 255, 0.02)', 
+                        borderColor: 'rgba(255, 255, 255, 0.05)',
+                        borderStyle: 'dashed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem'
+                      }}
+                      title={`Add ${DURATION_LABELS[d]} Rest`}
+                    >
+                      <div style={{ color }}>
+                        {renderRhythmIcon('rest', d, 16, color)}
+                      </div>
+                      <span style={{ color: 'var(--text-dim)' }}>{DURATION_LABELS[d]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Rhythmic Playback Track Sheet */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -606,7 +611,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '0.5rem 0.3rem 0.4rem 0.3rem',
-                    cursor: 'pointer',
+                    cursor: isPlayMode ? 'default' : 'pointer',
                     userSelect: 'none',
                     flexShrink: 0,
                     transition: 'all 0.15s ease'
@@ -615,36 +620,38 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
                   title={`${item.type === 'note' ? 'Note' : 'Rest'} (${label})`}
                 >
                   {/* Floating delete button appearing on 1s hover */}
-                  <button
-                    className="rhythm-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteRhythmItem(idx);
-                    }}
-                    title="Delete this block"
-                    style={{
-                      position: 'absolute',
-                      top: '-6px',
-                      right: '-6px',
-                      background: 'var(--accent-red)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: '15px',
-                      height: '15px',
-                      fontSize: '0.55rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
-                      zIndex: 10,
-                      padding: 0,
-                      lineHeight: 1
-                    }}
-                  >
-                    ✕
-                  </button>
+                  {!isPlayMode && (
+                    <button
+                      className="rhythm-delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteRhythmItem(idx);
+                      }}
+                      title="Delete this block"
+                      style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-6px',
+                        background: 'var(--accent-red)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '15px',
+                        height: '15px',
+                        fontSize: '0.55rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                        zIndex: 10,
+                        padding: 0,
+                        lineHeight: 1
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
 
                   {/* Horizontal Music Beaming Lines layer (Rules of Beaming) */}
                   {isBeamed && (
@@ -726,10 +733,12 @@ export default function RhythmWidget({ widgetId, initialData, onSave }: RhythmWi
       </div>
 
       {/* Helper Info */}
-      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-        <Info size={14} style={{ color: 'var(--secondary)', flexShrink: 0 }} />
-        <span>Compose realistic music-sheet rhythms. Playhead highlights active blocks, clicking notes and holding silence for rests!</span>
-      </div>
+      {!isPlayMode && (
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+          <Info size={14} style={{ color: 'var(--secondary)', flexShrink: 0 }} />
+          <span>Compose realistic music-sheet rhythms. Playhead highlights active blocks, clicking notes and holding silence for rests!</span>
+        </div>
+      )}
 
       <style>{`
         .rhythm-add-btn {

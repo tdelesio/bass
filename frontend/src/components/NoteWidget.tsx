@@ -7,17 +7,24 @@ interface NoteWidgetProps {
     text?: string;
   };
   onSave: (data: { text: string }) => void;
+  isPlayMode?: boolean;
 }
 
-export default function NoteWidget({ widgetId, initialData, onSave }: NoteWidgetProps) {
+export default function NoteWidget({ widgetId, initialData, onSave, isPlayMode }: NoteWidgetProps) {
   const [text, setText] = useState(initialData.text || 'Write notes here...');
-  const [isEditing, setIsEditing] = useState(!initialData.text || initialData.text === 'Write notes here...');
+  const [isEditing, setIsEditing] = useState(isPlayMode ? false : (!initialData.text || initialData.text === 'Write notes here...'));
 
   useEffect(() => {
     if (initialData.text !== undefined) {
       setText(initialData.text);
     }
   }, [initialData]);
+
+  useEffect(() => {
+    if (isPlayMode) {
+      setIsEditing(false);
+    }
+  }, [isPlayMode]);
 
   const handleSave = () => {
     setIsEditing(false);
@@ -71,17 +78,19 @@ export default function NoteWidget({ widgetId, initialData, onSave }: NoteWidget
 
   return (
     <div className="note-widget" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.25rem' }}>
-        {isEditing ? (
-          <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={handleSave}>
-            <Eye size={12} /> Preview
-          </button>
-        ) : (
-          <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => setIsEditing(true)}>
-            <Edit3 size={12} /> Edit Note
-          </button>
-        )}
-      </div>
+      {!isPlayMode && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.25rem' }}>
+          {isEditing ? (
+            <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={handleSave}>
+              <Eye size={12} /> Preview
+            </button>
+          ) : (
+            <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => setIsEditing(true)}>
+              <Edit3 size={12} /> Edit Note
+            </button>
+          )}
+        </div>
+      )}
 
       {isEditing ? (
         <textarea
