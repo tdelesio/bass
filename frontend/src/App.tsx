@@ -545,9 +545,11 @@ export default function App() {
               onDragLeave={() => setDragOverUncategorized(false)}
               onDrop={(e) => {
                 e.preventDefault();
-                const songId = e.dataTransfer.getData('text/plain');
+                const songId = e.dataTransfer.getData('text/plain') || draggedSongId;
                 setDragOverUncategorized(false);
-                handleMoveSongToFolder(songId, null);
+                if (songId) {
+                  handleMoveSongToFolder(songId, null);
+                }
               }}
             >
               <span>Move out of folder (Drop here)</span>
@@ -573,7 +575,7 @@ export default function App() {
                 onDragLeave={() => setDragOverFolderId(null)}
                 onDrop={(e) => {
                   e.preventDefault();
-                  const songId = e.dataTransfer.getData('text/plain');
+                  const songId = e.dataTransfer.getData('text/plain') || draggedSongId;
                   setDragOverFolderId(null);
                   if (songId) {
                     handleMoveSongToFolder(songId, folder.id);
@@ -931,12 +933,15 @@ export default function App() {
                         ) : (
                           currentPart.widgets.map((widget) => {
                             const meta = getWidgetTypeLabel(widget.widget_type);
+                            const widgetTitle = (widget.widget_type === 'fret_board' && widget.data?.title) 
+                              ? widget.data.title 
+                              : meta.name;
                             return (
                               <div key={widget.id} className="glass-card widget-card">
                                 <div className="widget-header">
                                   <span className="widget-title">
                                     {meta.icon}
-                                    {meta.name}
+                                    {widgetTitle}
                                   </span>
                                   <div className="widget-actions">
                                     <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px' }} onClick={() => handleDeleteWidget(widget.id)}>

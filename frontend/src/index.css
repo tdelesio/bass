@@ -673,6 +673,13 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
 }
 
+/* Prevent pointer events on folder children when dragging a song to prevent nested dragleave bugs */
+.song-list-scroll:has(.song-item.dragging) .folder-header *,
+.song-list-scroll:has(.song-item.dragging) .folder-songs-list * {
+  pointer-events: none;
+}
+
+
 .folder-header {
   display: flex;
   align-items: center;

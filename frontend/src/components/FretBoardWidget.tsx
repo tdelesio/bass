@@ -14,8 +14,9 @@ interface FretBoardWidgetProps {
   tuning: string;
   initialData: {
     notes?: FretNote[];
+    title?: string;
   };
-  onSave: (data: { notes: FretNote[] }) => void;
+  onSave: (data: { notes: FretNote[]; title?: string }) => void;
   isPlayMode?: boolean;
 }
 
@@ -67,7 +68,7 @@ const calculateFrequency = (baseMidi: number, fret: number): number => {
 
 export default function FretBoardWidget({ widgetId, tuning, initialData, onSave, isPlayMode }: FretBoardWidgetProps) {
   const [notes, setNotes] = useState<FretNote[]>(initialData.notes || []);
-  const [isRecording, setIsRecording] = useState(false);
+  const [customTitle, setCustomTitle] = useState<string>(initialData.title || '');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState<number | null>(null);
   const [playbackBpm, setPlaybackBpm] = useState(100);
@@ -86,6 +87,9 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
     if (initialData.notes) {
       setNotes(initialData.notes);
     }
+    if (initialData.title !== undefined) {
+      setCustomTitle(initialData.title || '');
+    }
   }, [initialData]);
 
   // Clean up playback on unmount
@@ -97,7 +101,12 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
 
   const saveChanges = (updatedNotes: FretNote[]) => {
     setNotes(updatedNotes);
-    onSave({ notes: updatedNotes });
+    onSave({ notes: updatedNotes, title: customTitle });
+  };
+
+  const handleTitleChange = (newTitle: string) => {
+    setCustomTitle(newTitle);
+    onSave({ notes, title: newTitle });
   };
 
   // Synthesizes a realistic warm bass tone using Triangle wave + Gain ramp-down + Lowpass filter
@@ -181,20 +190,11 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
     saveChanges(resequenced);
   };
 
-  // Toggle record mode helper
-  const toggleRecording = () => {
-    setIsRecording(!isRecording);
-    if (!isRecording) {
-      stopPlayback();
-    }
-  };
-
   // Trigger Playback Sequence
   const startPlayback = () => {
     if (notes.length === 0) return;
     stopPlayback();
     setIsPlaying(true);
-    setIsRecording(false);
 
     // Warm up and activate AudioContext on direct user tap event for mobile/phone browsers
     try {
@@ -349,6 +349,54 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
 
   return (
     <div className="fretboard-widget">
+      {/* Editable Widget Name */}
+      {!isPlayMode ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '0.75rem',
+          padding: '0.4rem 0.75rem',
+          background: 'rgba(255, 255, 255, 0.01)',
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid rgba(255,255,255,0.02)',
+          maxWidth: '350px'
+        }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fret Board Name:</span>
+          <input
+            type="text"
+            className="input-field"
+            style={{
+              padding: '0.2rem 0.5rem',
+              fontSize: '0.85rem',
+              background: 'rgba(0,0,0,0.15)',
+              border: '1px solid rgba(255,255,255,0.05)',
+              height: 'auto',
+              borderRadius: 'var(--radius-xs)',
+              color: 'var(--text-main)',
+              flex: 1
+            }}
+            placeholder="e.g. Verse Bassline"
+            value={customTitle}
+            onChange={(e) => handleTitleChange(e.target.value)}
+          />
+        </div>
+      ) : (
+        customTitle && (
+          <div style={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            color: 'var(--primary)',
+            marginBottom: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>🎯</span> {customTitle}
+          </div>
+        )
+      )}
+
       {/* Play/Control Bar */}
       <div className="fretboard-controls" style={{
         display: 'flex',
@@ -370,13 +418,6 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
           ) : (
             <button className="btn btn-danger" onClick={stopPlayback}>
               <Square size={16} /> Stop
-            </button>
-          )}
-
-          {!isPlayMode && (
-            <button className={`btn ${isRecording ? 'btn-danger' : 'btn-secondary'}`} onClick={toggleRecording}>
-              <Circle size={14} fill={isRecording ? 'var(--accent-red)' : 'transparent'} /> 
-              {isRecording ? 'Recording Note sequence' : 'Record Mode'}
             </button>
           )}
         </div>
@@ -645,7 +686,7 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
       {/* Tiny Instruction Note */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
         <Zap size={14} className="glow-icon" style={{ color: 'var(--primary)' }} />
-        <span>{isRecording ? "Click anywhere on the wood grid to record notes sequentially. Click a placed note to erase it from the chain." : "Click Record Mode to edit sequences, or Play Sequence to hear the notes synthesized!"}</span>
+        <span>{!isPlayMode ? "Click anywhere on the fretboard wood grid to place notes sequentially. Click a placed note number to delete it." : "Press 'Play Sequence' to hear the notes synthesized!"}</span>
       </div>
 
       <style>{`
