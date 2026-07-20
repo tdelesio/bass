@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit3, Eye, FileText } from 'lucide-react';
+import { Edit3, Eye, FileText, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 
 interface NoteWidgetProps {
   widgetId: string;
@@ -13,10 +13,12 @@ interface NoteWidgetProps {
 export default function NoteWidget({ widgetId, initialData, onSave, isPlayMode }: NoteWidgetProps) {
   const [text, setText] = useState(initialData.text || 'Write notes here...');
   const [isEditing, setIsEditing] = useState(isPlayMode ? false : (!initialData.text || initialData.text === 'Write notes here...'));
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty'>('saved');
 
   useEffect(() => {
     if (initialData.text !== undefined) {
       setText(initialData.text);
+      setSaveStatus('saved');
     }
   }, [initialData]);
 
@@ -26,9 +28,31 @@ export default function NoteWidget({ widgetId, initialData, onSave, isPlayMode }
     }
   }, [isPlayMode]);
 
-  const handleSave = () => {
+  const triggerSave = async (textToSave: string) => {
+    setSaveStatus('saving');
+    try {
+      await onSave({ text: textToSave });
+      setSaveStatus('saved');
+    } catch (err) {
+      console.error('Failed to autosave notes:', err);
+      setSaveStatus('dirty');
+    }
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    setSaveStatus('dirty');
+  };
+
+  const handleBlur = () => {
+    if (saveStatus === 'dirty') {
+      triggerSave(text);
+    }
+  };
+
+  const handleSaveAndPreview = () => {
     setIsEditing(false);
-    onSave({ text });
+    triggerSave(text);
   };
 
   // Basic renderer helper for styling bold/italic and lists without needing heavy markdown libraries
@@ -79,16 +103,45 @@ export default function NoteWidget({ widgetId, initialData, onSave, isPlayMode }
   return (
     <div className="note-widget" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       {!isPlayMode && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.25rem' }}>
-          {isEditing ? (
-            <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={handleSave}>
-              <Eye size={12} /> Preview
-            </button>
-          ) : (
-            <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => setIsEditing(true)}>
-              <Edit3 size={12} /> Edit Note
-            </button>
-          )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+          {/* Autosave Status Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem' }}>
+            {saveStatus === 'saved' && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--accent-green)', opacity: 0.8 }}>
+                <CheckCircle2 size={12} /> Autosaved
+              </span>
+            )}
+            {saveStatus === 'saving' && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--secondary)' }}>
+                <Loader2 size={12} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Saving...
+              </span>
+            )}
+            {saveStatus === 'dirty' && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b', opacity: 0.9 }}>
+                <AlertCircle size={12} /> Unsaved changes (autosaves on blur)
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {isEditing ? (
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} 
+                onClick={handleSaveAndPreview}
+              >
+                <Eye size={12} /> Save & Preview
+              </button>
+            ) : (
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} 
+                onClick={() => setIsEditing(true)}
+              >
+                <Edit3 size={12} /> Edit Note
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -96,7 +149,8 @@ export default function NoteWidget({ widgetId, initialData, onSave, isPlayMode }
         <textarea
           className="input-field"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleTextChange}
+          onBlur={handleBlur}
           placeholder="Type songs notes, chord guides, or tab strings here. Supported: ## Heading, * Bullets, and **Bold** text."
           style={{
             minHeight: '140px',

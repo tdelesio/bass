@@ -43,6 +43,16 @@ async function initializeDatabaseSchema() {
       END $$;
     `);
 
+    // Create folders table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS folders (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Create tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS songs (
@@ -51,9 +61,15 @@ async function initializeDatabaseSchema() {
           artist VARCHAR(255) NOT NULL,
           tuning VARCHAR(100) DEFAULT 'Standard (EADG)' NOT NULL,
           key_signature VARCHAR(100) DEFAULT 'C Major' NOT NULL,
+          folder_id UUID REFERENCES folders(id) ON DELETE SET NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    // Ensure folder_id column exists for database upgrades
+    await pool.query(`
+      ALTER TABLE songs ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES folders(id) ON DELETE SET NULL;
     `);
 
     await pool.query(`
@@ -180,6 +196,103 @@ app.get('/api/songs/:id', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to retrieve song details' });
+  }
+});
+
+// Update an existing song (including organizing into folder_id)
+app.put('/api/songs/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { title, artist, tuning, key_signature, folder_id } = req.body;
+  try {
+    const songRes = await pool.query('SELECT * FROM songs WHERE id = $1', [id]);
+    if (songRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+    const current = songRes.rows[0];
+    const newTitle = title !== undefined ? title : current.title;
+    const newArtist = artist !== undefined ? artist : current.artist;
+    const newTuning = tuning !== undefined ? tuning : current.tuning;
+    const newKeySig = key_signature !== undefined ? key_signature : current.key_signature;
+    const newFolderId = folder_id !== undefined ? (folder_id === null ? null : folder_id) : current.folder_id;
+
+    const result = await pool.query(
+      'UPDATE songs SET title = $1, artist = $2, tuning = $3, key_signature = $4, folder_id = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
+      [newTitle, newArtist, newTuning, newKeySig, newFolderId, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update song' });
+  }
+});
+
+/* ==========================================================================
+   FOLDER ROUTES
+   ========================================================================== */
+
+// Get all folders
+app.get('/api/folders', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query('SELECT * FROM folders ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve folders' });
+  }
+});
+
+// Create a new folder
+app.post('/api/folders', async (req: Request, res: Response) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Folder name is required' });
+  }
+  try {
+    const result = await pool.query(
+      'INSERT INTO folders (name) VALUES ($1) RETURNING *',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create folder' });
+  }
+});
+
+// Rename a folder
+app.put('/api/folders/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Folder name is required' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [name, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update folder' });
+  }
+});
+
+// Delete a folder
+app.delete('/api/folders/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM folders WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    res.json({ message: 'Folder deleted successfully', folder: result.rows[0] });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete folder' });
   }
 });
 
@@ -341,10 +454,12 @@ app.get('/api/backup', async (req: Request, res: Response) => {
     const songs = await pool.query('SELECT * FROM songs');
     const songParts = await pool.query('SELECT * FROM song_parts');
     const widgets = await pool.query('SELECT * FROM widgets');
+    const folders = await pool.query('SELECT * FROM folders');
 
     res.json({
-      version: '1.0',
+      version: '1.1',
       timestamp: new Date().toISOString(),
+      folders: folders.rows,
       songs: songs.rows,
       song_parts: songParts.rows,
       widgets: widgets.rows
@@ -358,6 +473,7 @@ app.get('/api/backup', async (req: Request, res: Response) => {
 // 11. Restore a database from backup payload (POST /api/restore)
 app.post('/api/restore', async (req: Request, res: Response) => {
   const { songs, song_parts, widgets } = req.body;
+  const folders = req.body.folders || [];
 
   if (!Array.isArray(songs) || !Array.isArray(song_parts) || !Array.isArray(widgets)) {
     return res.status(400).json({ error: 'Invalid backup file format. Must contain songs, song_parts, and widgets arrays.' });
@@ -371,12 +487,21 @@ app.post('/api/restore', async (req: Request, res: Response) => {
     await client.query('DELETE FROM widgets');
     await client.query('DELETE FROM song_parts');
     await client.query('DELETE FROM songs');
+    await client.query('DELETE FROM folders');
+
+    // Restore Folders
+    for (const folder of folders) {
+      await client.query(
+        'INSERT INTO folders (id, name, created_at, updated_at) VALUES ($1, $2, $3, $4)',
+        [folder.id, folder.name, folder.created_at, folder.updated_at]
+      );
+    }
 
     // Restore Songs
     for (const song of songs) {
       await client.query(
-        'INSERT INTO songs (id, title, artist, tuning, key_signature, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [song.id, song.title, song.artist, song.tuning, song.key_signature, song.created_at, song.updated_at]
+        'INSERT INTO songs (id, title, artist, tuning, key_signature, folder_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [song.id, song.title, song.artist, song.tuning, song.key_signature, song.folder_id || null, song.created_at, song.updated_at]
       );
     }
 
@@ -401,6 +526,7 @@ app.post('/api/restore', async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.json({ 
       message: 'Database restored successfully!', 
+      foldersCount: folders.length,
       songsCount: songs.length, 
       partsCount: song_parts.length, 
       widgetsCount: widgets.length 

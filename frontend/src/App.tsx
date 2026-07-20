@@ -2,12 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   Music, Plus, Trash2, FolderPlus, Compass, ArrowRight, Menu, X, 
   Layers, FileText, Activity, Hash, Layers3, RefreshCw, ChevronLeft, ChevronRight,
-  Download, Upload
+  Download, Upload, Folder, FolderOpen, ChevronDown, ChevronUp
 } from 'lucide-react';
 import FretBoardWidget from './components/FretBoardWidget.tsx';
 import NoteWidget from './components/NoteWidget.tsx';
 import RhythmWidget from './components/RhythmWidget.tsx';
 import RomanNumeralWidget from './components/RomanNumeralWidget.tsx';
+
+interface Folder {
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface Song {
   id: string;
@@ -15,6 +22,7 @@ interface Song {
   artist: string;
   tuning: string;
   key_signature: string;
+  folder_id?: string | null;
 }
 
 interface Widget {
@@ -65,6 +73,17 @@ export default function App() {
   const [activePartId, setActivePartId] = useState<string | null>(null);
   const [collapsedParts, setCollapsedParts] = useState<Record<string, boolean>>({});
 
+  // Folders state
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  // Drag and drop state
+  const [draggedSongId, setDraggedSongId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dragOverUncategorized, setDragOverUncategorized] = useState(false);
+
   // Mobile layout sidebars
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -95,10 +114,23 @@ export default function App() {
   };
   const API_BASE = getApiBase();
 
-  // Load all songs initially
+  // Load all songs & folders initially
   useEffect(() => {
     fetchSongs();
+    fetchFolders();
   }, []);
+
+  const fetchFolders = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/folders`);
+      if (res.ok) {
+        const data = await res.json();
+        setFolders(data);
+      }
+    } catch (err) {
+      console.error('Error fetching folders list:', err);
+    }
+  };
 
   // Load full details whenever selection changes
   useEffect(() => {
@@ -189,6 +221,7 @@ export default function App() {
         setSelectedSong(null);
         setActivePartId(null);
         await fetchSongs();
+        await fetchFolders();
       } catch (err: any) {
         console.error('Restore error:', err);
         alert(`❌ Restore failed: ${err.message}`);
@@ -269,6 +302,64 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error deleting song:', err);
+    }
+  };
+
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFolders(prev => [...prev, data]);
+        setExpandedFolders(prev => ({ ...prev, [data.id]: true }));
+        setNewFolderName('');
+        setIsNewFolderModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Error creating folder:', err);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this folder? Organized songs will be safely moved to "Uncategorized Songs".')) return;
+    try {
+      const res = await fetch(`${API_BASE}/folders/${folderId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setFolders(prev => prev.filter(f => f.id !== folderId));
+        setSongs(prev => prev.map(s => s.folder_id === folderId ? { ...s, folder_id: null } : s));
+        if (selectedSong && selectedSong.folder_id === folderId) {
+          setSelectedSong(prev => prev ? { ...prev, folder_id: null } : null);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting folder:', err);
+    }
+  };
+
+  const handleMoveSongToFolder = async (songId: string, folderId: string | null) => {
+    try {
+      const res = await fetch(`${API_BASE}/songs/${songId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId })
+      });
+      if (res.ok) {
+        setSongs(prev => prev.map(s => s.id === songId ? { ...s, folder_id: folderId } : s));
+        if (selectedSong && selectedSong.id === songId) {
+          setSelectedSong(prev => prev ? { ...prev, folder_id: folderId } : null);
+        }
+      }
+    } catch (err) {
+      console.error('Error organizing song into folder:', err);
     }
   };
 
@@ -374,6 +465,44 @@ export default function App() {
 
   const currentPart = selectedSong?.parts.find(p => p.id === activePartId);
 
+  const renderSongCard = (s: Song) => {
+    const isDraggingThis = draggedSongId === s.id;
+    return (
+      <div 
+        key={s.id} 
+        draggable={true}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', s.id);
+          setDraggedSongId(s.id);
+        }}
+        onDragEnd={() => {
+          setDraggedSongId(null);
+        }}
+        className={`song-item ${selectedSongId === s.id ? 'active' : ''} ${isDraggingThis ? 'dragging' : ''}`}
+        onClick={() => {
+          setSelectedSongId(s.id);
+          setIsSidebarOpen(false); // Close on mobile navigation
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+          <span className="song-title">{s.title}</span>
+          <button 
+            className="btn btn-secondary btn-icon" 
+            style={{ width: '24px', height: '24px', opacity: 0.6 }} 
+            onClick={(e) => handleDeleteSong(s.id, e)}
+          >
+            <Trash2 size={12} style={{ color: 'var(--accent-red)' }} />
+          </button>
+        </div>
+        <span className="song-artist">{s.artist}</span>
+        <div className="song-meta-badges">
+          <span className="badge badge-primary">{s.tuning.split(' (')[0]}</span>
+          <span className="badge badge-secondary">{s.key_signature}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-container">
       {/* Mobile Toggle Menu Bar */}
@@ -388,44 +517,128 @@ export default function App() {
             <Music size={22} style={{ color: 'var(--primary)', filter: 'drop-shadow(0 0 8px var(--primary))' }} />
             <h1>Bass Fret Lesson</h1>
           </div>
-          <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setIsNewSongModalOpen(true)}>
-            <Plus size={16} /> Add New Song
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setIsNewSongModalOpen(true)}>
+              <Plus size={16} /> Add Song
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+              onClick={() => setIsNewFolderModalOpen(true)}
+              title="Create Folder"
+            >
+              <FolderPlus size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Song Items */}
         <div className="song-list-scroll">
-          {songs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-              No songs added yet. Start by clicking Add New Song!
+          {/* Dynamic Uncategorized Drop Zone (Visible when dragging a song) */}
+          {draggedSongId && (
+            <div 
+              className={`uncategorized-drop-zone ${dragOverUncategorized ? 'drag-over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverUncategorized(true);
+              }}
+              onDragLeave={() => setDragOverUncategorized(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                const songId = e.dataTransfer.getData('text/plain');
+                setDragOverUncategorized(false);
+                handleMoveSongToFolder(songId, null);
+              }}
+            >
+              <span>Move out of folder (Drop here)</span>
             </div>
-          ) : (
-            songs.map((s) => (
+          )}
+
+          {/* Render Folders */}
+          {folders.map(folder => {
+            const folderSongs = songs.filter(s => s.folder_id === folder.id);
+            const isExpanded = expandedFolders[folder.id] !== false; // Default to expanded
+            const isDragOver = dragOverFolderId === folder.id;
+
+            return (
               <div 
-                key={s.id} 
-                className={`song-item ${selectedSongId === s.id ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedSongId(s.id);
-                  setIsSidebarOpen(false); // Close on mobile navigation
+                key={folder.id} 
+                className={`folder-group ${isDragOver ? 'drag-over' : ''}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedSongId && songs.find(s => s.id === draggedSongId)?.folder_id !== folder.id) {
+                    setDragOverFolderId(folder.id);
+                  }
+                }}
+                onDragLeave={() => setDragOverFolderId(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const songId = e.dataTransfer.getData('text/plain');
+                  setDragOverFolderId(null);
+                  if (songId) {
+                    handleMoveSongToFolder(songId, folder.id);
+                  }
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                  <span className="song-title">{s.title}</span>
-                  <button 
-                    className="btn btn-secondary btn-icon" 
-                    style={{ width: '24px', height: '24px', opacity: 0.6 }} 
-                    onClick={(e) => handleDeleteSong(s.id, e)}
-                  >
-                    <Trash2 size={12} style={{ color: 'var(--accent-red)' }} />
-                  </button>
+                <div 
+                  className="folder-header" 
+                  onClick={() => setExpandedFolders(prev => ({ ...prev, [folder.id]: !isExpanded }))}
+                >
+                  <div className="folder-header-left">
+                    {isExpanded ? <FolderOpen size={16} style={{ color: 'var(--primary)' }} /> : <Folder size={16} style={{ color: 'var(--primary)' }} />}
+                    <span className="folder-title" title={folder.name}>{folder.name}</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.5 }}>({folderSongs.length})</span>
+                  </div>
+                  <div className="folder-actions">
+                    <button 
+                      className="folder-btn" 
+                      onClick={(e) => handleDeleteFolder(folder.id, e)}
+                      title="Delete Folder"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                    {isExpanded ? <ChevronUp size={14} style={{ opacity: 0.5 }} /> : <ChevronDown size={14} style={{ opacity: 0.5 }} />}
+                  </div>
                 </div>
-                <span className="song-artist">{s.artist}</span>
-                <div className="song-meta-badges">
-                  <span className="badge badge-primary">{s.tuning.split(' (')[0]}</span>
-                  <span className="badge badge-secondary">{s.key_signature}</span>
-                </div>
+
+                {isExpanded && (
+                  <div className="folder-songs-list">
+                    {folderSongs.length === 0 ? (
+                      <div style={{ padding: '0.75rem', fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center', fontStyle: 'italic' }}>
+                        Folder is empty. Drag songs here!
+                      </div>
+                    ) : (
+                      folderSongs.map(renderSongCard)
+                    )}
+                  </div>
+                )}
               </div>
-            ))
+            );
+          })}
+
+          {/* Render Uncategorized Songs (songs that have no folder_id) */}
+          {songs.length === 0 && folders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+              No songs added yet. Start by clicking Add Song!
+            </div>
+          ) : (
+            <>
+              {folders.length > 0 && songs.filter(s => !s.folder_id).length > 0 && (
+                <div style={{ 
+                  fontSize: '0.7rem', 
+                  color: 'var(--text-dim)', 
+                  fontWeight: 600, 
+                  textTransform: 'uppercase', 
+                  letterSpacing: '0.05em', 
+                  marginTop: '0.75rem',
+                  marginBottom: '0.25rem',
+                  paddingLeft: '0.25rem'
+                }}>
+                  Uncategorized Songs
+                </div>
+              )}
+              {songs.filter(s => !s.folder_id).map(renderSongCard)}
+            </>
           )}
         </div>
 
@@ -747,6 +960,7 @@ export default function App() {
                                     widgetId={widget.id}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    isPlayMode={false}
                                   />
                                 )}
 
@@ -1034,6 +1248,42 @@ export default function App() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Create study file
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* NEW FOLDER DIALOG MODAL */}
+      {isNewFolderModalOpen && (
+        <div className="modal-overlay">
+          <div className="glass-card modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Create New Folder</h3>
+            </div>
+            <form onSubmit={handleCreateFolder}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Folder Name</label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    required 
+                    autoFocus
+                    placeholder="e.g. Rock Classics" 
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsNewFolderModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Create Folder
                 </button>
               </div>
             </form>

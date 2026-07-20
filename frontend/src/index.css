@@ -654,3 +654,120 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+
+/* Folders Styling */
+.folder-group {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+  margin-bottom: 0.5rem;
+}
+
+.folder-group.drag-over {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+}
+
+.folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.folder-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.folder-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-main);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.folder-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.folder-header:hover .folder-actions {
+  opacity: 1;
+}
+
+.folder-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.folder-btn:hover {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.folder-songs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+/* Uncategorized Drop Zone styles */
+.uncategorized-drop-zone {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.005);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: default;
+  transition: all var(--transition-fast);
+}
+
+.uncategorized-drop-zone.drag-over {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+  color: var(--primary);
+}
+
+.song-item.dragging {
+  opacity: 0.4;
+  border-color: var(--primary);
+}
+
