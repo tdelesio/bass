@@ -470,7 +470,7 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
               {[3, 5, 7, 9, 15].map(fret => (
                 <div key={fret} style={{
                   position: 'absolute',
-                  left: `${fret * 60 - 30}px`,
+                  left: `${fret * 60 + 30}px`,
                   top: '50%',
                   transform: 'translate(-50%, -50%)',
                   width: '10px',
@@ -480,8 +480,8 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
                 }} />
               ))}
               {/* Double dot at fret 12 */}
-              <div style={{ position: 'absolute', left: `${12 * 60 - 30}px`, top: '30%', transform: 'translateX(-50%)', width: '8px', height: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-              <div style={{ position: 'absolute', left: `${12 * 60 - 30}px`, bottom: '30%', transform: 'translateX(-50%)', width: '8px', height: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+              <div style={{ position: 'absolute', left: `${12 * 60 + 30}px`, top: '30%', transform: 'translateX(-50%)', width: '8px', height: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+              <div style={{ position: 'absolute', left: `${12 * 60 + 30}px`, bottom: '30%', transform: 'translateX(-50%)', width: '8px', height: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
             </div>
 
             {/* Render each string */}
@@ -531,9 +531,6 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
                   {/* Interactive Frets Cells */}
                   <div className="fret-cells" style={{ display: 'flex', flex: 1, zIndex: 4 }}>
                     {Array.from({ length: maxFrets + 1 }).map((_, fretIdx) => {
-                      // Metal fret wire bar
-                      const showFretWire = fretIdx > 0;
-
                       // Check if a note is currently placed on this intersection
                       const matchingNotes = notes.filter(n => n.string === stringNum && n.fret === fretIdx);
                       const hasNotes = matchingNotes.length > 0;
@@ -553,7 +550,7 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            borderRight: showFretWire ? '1.5px solid #4a5568' : 'none'
+                            borderRight: '1.5px solid #4a5568'
                           }}
                         >
                           {/* Inner wood highlight on hover */}
