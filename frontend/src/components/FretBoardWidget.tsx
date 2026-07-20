@@ -349,52 +349,19 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
 
   return (
     <div className="fretboard-widget">
-      {/* Editable Widget Name */}
-      {!isPlayMode ? (
+      {/* Play Mode title badge if customTitle exists */}
+      {isPlayMode && customTitle && (
         <div style={{
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          color: 'var(--primary)',
+          marginBottom: '0.5rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.75rem',
-          marginBottom: '0.75rem',
-          padding: '0.4rem 0.75rem',
-          background: 'rgba(255, 255, 255, 0.01)',
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid rgba(255,255,255,0.02)',
-          maxWidth: '350px'
+          gap: '0.4rem'
         }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fret Board Name:</span>
-          <input
-            type="text"
-            className="input-field"
-            style={{
-              padding: '0.2rem 0.5rem',
-              fontSize: '0.85rem',
-              background: 'rgba(0,0,0,0.15)',
-              border: '1px solid rgba(255,255,255,0.05)',
-              height: 'auto',
-              borderRadius: 'var(--radius-xs)',
-              color: 'var(--text-main)',
-              flex: 1
-            }}
-            placeholder="e.g. Verse Bassline"
-            value={customTitle}
-            onChange={(e) => handleTitleChange(e.target.value)}
-          />
+          <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>🎯</span> {customTitle}
         </div>
-      ) : (
-        customTitle && (
-          <div style={{
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            color: 'var(--primary)',
-            marginBottom: '0.75rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem'
-          }}>
-            <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>🎯</span> {customTitle}
-          </div>
-        )
       )}
 
       {/* Play/Control Bar */}

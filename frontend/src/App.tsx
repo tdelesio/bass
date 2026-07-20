@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Music, Plus, Trash2, FolderPlus, Compass, ArrowRight, Menu, X, 
   Layers, FileText, Activity, Hash, Layers3, RefreshCw, ChevronLeft, ChevronRight,
-  Download, Upload, Folder, FolderOpen, ChevronDown, ChevronUp
+  Download, Upload, Folder, FolderOpen, ChevronDown, ChevronUp, Edit3
 } from 'lucide-react';
 import FretBoardWidget from './components/FretBoardWidget.tsx';
 import NoteWidget from './components/NoteWidget.tsx';
@@ -83,6 +83,10 @@ export default function App() {
   const [draggedSongId, setDraggedSongId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverUncategorized, setDragOverUncategorized] = useState(false);
+
+  // Widget Title Editing state
+  const [editingWidgetTitleId, setEditingWidgetTitleId] = useState<string | null>(null);
+  const [editingWidgetTitleValue, setEditingWidgetTitleValue] = useState<string>('');
 
   // Mobile layout sidebars
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -437,6 +441,15 @@ export default function App() {
     } catch (err) {
       console.error('Error saving widget data:', err);
     }
+  };
+
+  const handleSaveWidgetTitle = (widget: any, newTitle: string) => {
+    const updatedData = {
+      ...(widget.data || {}),
+      title: newTitle.trim()
+    };
+    handleSaveWidgetData(widget.id, updatedData);
+    setEditingWidgetTitleId(null);
   };
 
   const handleDeleteWidget = async (widgetId: string) => {
@@ -936,13 +949,59 @@ export default function App() {
                             const widgetTitle = (widget.widget_type === 'fret_board' && widget.data?.title) 
                               ? widget.data.title 
                               : meta.name;
+                            const isEditingTitle = editingWidgetTitleId === widget.id;
                             return (
                               <div key={widget.id} className="glass-card widget-card">
                                 <div className="widget-header">
-                                  <span className="widget-title">
-                                    {meta.icon}
-                                    {widgetTitle}
-                                  </span>
+                                  {isEditingTitle ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1 }}>
+                                      {meta.icon}
+                                      <input 
+                                        type="text"
+                                        className="input-field"
+                                        style={{
+                                          padding: '0.15rem 0.5rem',
+                                          fontSize: '0.85rem',
+                                          background: 'rgba(0,0,0,0.25)',
+                                          border: '1px solid var(--primary)',
+                                          borderRadius: 'var(--radius-xs)',
+                                          color: 'var(--text-main)',
+                                          height: 'auto',
+                                          maxWidth: '220px',
+                                          margin: 0
+                                        }}
+                                        autoFocus
+                                        value={editingWidgetTitleValue}
+                                        onChange={(e) => setEditingWidgetTitleValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSaveWidgetTitle(widget, editingWidgetTitleValue);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingWidgetTitleId(null);
+                                          }
+                                        }}
+                                        onBlur={() => handleSaveWidgetTitle(widget, editingWidgetTitleValue)}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="widget-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      {meta.icon}
+                                      {widgetTitle}
+                                      {widget.widget_type === 'fret_board' && (
+                                        <button 
+                                          className="btn btn-secondary btn-icon"
+                                          style={{ width: '22px', height: '22px', padding: 0, opacity: 0.6, border: 'none', background: 'transparent' }}
+                                          title="Rename Fret Board"
+                                          onClick={() => {
+                                            setEditingWidgetTitleId(widget.id);
+                                            setEditingWidgetTitleValue(widget.data?.title || '');
+                                          }}
+                                        >
+                                          <Edit3 size={11} style={{ color: 'var(--primary)' }} />
+                                        </button>
+                                      )}
+                                    </span>
+                                  )}
                                   <div className="widget-actions">
                                     <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px' }} onClick={() => handleDeleteWidget(widget.id)}>
                                       <Trash2 size={13} style={{ color: 'var(--accent-red)' }} />
