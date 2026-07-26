@@ -112,9 +112,17 @@ export default function App() {
 
   // Backend API URI base (self-correcting for dev/prod proxy boundaries)
   const getApiBase = () => {
-    const url = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    if (url.endsWith('/api')) return url;
-    return url + '/api';
+    // If VITE_API_URL is explicitly set during build, honor it
+    if (import.meta.env.VITE_API_URL) {
+      const url = import.meta.env.VITE_API_URL;
+      return url.endsWith('/api') ? url : url + '/api';
+    }
+    // If running on localhost/127.0.0.1, default to standard local port 3001 backend
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:3001/api';
+    }
+    // Remote domain production: use relative root proxy path to work instantly behind Traefik/Nginx
+    return '/api';
   };
   const API_BASE = getApiBase();
 
