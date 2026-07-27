@@ -507,13 +507,60 @@ export default function App() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
           <span className="song-title">{s.title}</span>
-          <button 
-            className="btn btn-secondary btn-icon" 
-            style={{ width: '24px', height: '24px', opacity: 0.6 }} 
-            onClick={(e) => handleDeleteSong(s.id, e)}
-          >
-            <Trash2 size={12} style={{ color: 'var(--accent-red)' }} />
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+            <button 
+              className="btn btn-secondary btn-icon" 
+              style={{ width: '24px', height: '24px', opacity: 0.6 }} 
+              onClick={(e) => handleDeleteSong(s.id, e)}
+              title="Delete Song"
+            >
+              <Trash2 size={12} style={{ color: 'var(--accent-red)' }} />
+            </button>
+            <div 
+              className="btn btn-secondary btn-icon" 
+              style={{ 
+                width: '24px', 
+                height: '24px', 
+                opacity: 0.6, 
+                position: 'relative', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: 0
+              }}
+              title="Move Song to Folder"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <FolderPlus size={12} style={{ color: 'var(--primary)' }} />
+              <select
+                value={s.folder_id || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleMoveSongToFolder(s.id, val === '' ? null : val);
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  opacity: 0,
+                  cursor: 'pointer',
+                  appearance: 'none'
+                }}
+              >
+                <option value="" disabled hidden>Move to...</option>
+                {s.folder_id && (
+                  <option value="">[Remove from Folder]</option>
+                )}
+                {folders.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
         <span className="song-artist">{s.artist}</span>
         <div className="song-meta-badges">
