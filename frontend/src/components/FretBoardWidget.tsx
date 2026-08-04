@@ -15,9 +15,11 @@ interface FretBoardWidgetProps {
   initialData: {
     notes?: FretNote[];
     title?: string;
+    linkedRhythmId?: string;
   };
-  onSave: (data: { notes: FretNote[]; title?: string }) => void;
+  onSave: (data: { notes: FretNote[]; title?: string; linkedRhythmId?: string }) => void;
   isPlayMode?: boolean;
+  allWidgets?: any[];
 }
 
 // Map chromatic scale
@@ -66,9 +68,10 @@ const calculateFrequency = (baseMidi: number, fret: number): number => {
   return 440 * Math.pow(2, (midi - 69) / 12);
 };
 
-export default function FretBoardWidget({ widgetId, tuning, initialData, onSave, isPlayMode }: FretBoardWidgetProps) {
+export default function FretBoardWidget({ widgetId, tuning, initialData, onSave, isPlayMode, allWidgets = [] }: FretBoardWidgetProps) {
   const [notes, setNotes] = useState<FretNote[]>(initialData.notes || []);
   const [customTitle, setCustomTitle] = useState<string>(initialData.title || '');
+  const [linkedRhythmId, setLinkedRhythmId] = useState<string | undefined>(initialData.linkedRhythmId);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState<number | null>(null);
   const [playbackBpm, setPlaybackBpm] = useState(100);
@@ -90,6 +93,9 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
     if (initialData.title !== undefined) {
       setCustomTitle(initialData.title || '');
     }
+    if (initialData.linkedRhythmId !== undefined) {
+      setLinkedRhythmId(initialData.linkedRhythmId);
+    }
   }, [initialData]);
 
   // Clean up playback on unmount
@@ -101,12 +107,17 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
 
   const saveChanges = (updatedNotes: FretNote[]) => {
     setNotes(updatedNotes);
-    onSave({ notes: updatedNotes, title: customTitle });
+    onSave({ notes: updatedNotes, title: customTitle, linkedRhythmId });
   };
 
   const handleTitleChange = (newTitle: string) => {
     setCustomTitle(newTitle);
-    onSave({ notes, title: newTitle });
+    onSave({ notes, title: newTitle, linkedRhythmId });
+  };
+
+  const handleLinkRhythm = (targetId: string | undefined) => {
+    setLinkedRhythmId(targetId);
+    onSave({ notes, title: customTitle, linkedRhythmId: targetId });
   };
 
   // Synthesizes a realistic warm bass tone using Triangle wave + Gain ramp-down + Lowpass filter
@@ -414,6 +425,68 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
             />
             Loop
           </label>
+
+          {/* Rhythm Sequencer Association Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Link Rhythm:</span>
+            <select
+              value={linkedRhythmId || ''}
+              onChange={(e) => handleLinkRhythm(e.target.value || undefined)}
+              disabled={isPlayMode}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: linkedRhythmId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 'var(--radius-sm)',
+                color: linkedRhythmId ? 'var(--primary)' : 'var(--text-main)',
+                fontSize: '0.8rem',
+                padding: '0.25rem 0.5rem',
+                cursor: isPlayMode ? 'not-allowed' : 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="">(None)</option>
+              {allWidgets
+                .filter(w => w.widget_type === 'rhythm')
+                .map(w => (
+                  <option key={w.id} value={w.id}>
+                    {w.data?.title || `Rhythm Sequencer`}
+                  </option>
+                ))
+              }
+            </select>
+            {linkedRhythmId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(`widget-${linkedRhythmId}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.outline = '3px solid var(--primary)';
+                    el.style.boxShadow = '0 0 25px rgba(99, 102, 241, 0.6)';
+                    el.style.borderRadius = 'var(--radius-lg)';
+                    el.style.transition = 'outline 0.15s ease, box-shadow 0.15s ease';
+                    setTimeout(() => {
+                      el.style.outline = '';
+                      el.style.boxShadow = '';
+                    }, 1500);
+                  }
+                }}
+                style={{
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  border: '1px solid var(--primary)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--primary)',
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+                title="Show and flash linked Rhythm Sequencer"
+              >
+                Go to Link
+              </button>
+            )}
+          </div>
 
           {!isPlayMode && (
             <button className="btn btn-secondary btn-icon" onClick={clearFretboard} title="Clear Fretboard">

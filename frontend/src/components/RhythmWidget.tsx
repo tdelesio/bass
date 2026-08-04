@@ -15,7 +15,6 @@ interface RhythmWidgetProps {
     subdivisions?: number;
     beats?: boolean[];
     items?: RhythmItem[];
-    linkedFretboardId?: string;
   };
   onSave: (data: { 
     timeSignature: string; 
@@ -23,7 +22,6 @@ interface RhythmWidgetProps {
     subdivisions: number; 
     beats: boolean[];
     items: RhythmItem[];
-    linkedFretboardId?: string;
   }) => void;
   isPlayMode?: boolean;
   allWidgets?: any[];
@@ -236,7 +234,6 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
   const [tempo, setTempo] = useState(initialData.tempo || 100);
   const [subdivisions, setSubdivisions] = useState(initialData.subdivisions || 4);
   const [beats, setBeats] = useState<boolean[]>(initialData.beats || Array(16).fill(false));
-  const [linkedFretboardId, setLinkedFretboardId] = useState<string | undefined>(initialData.linkedFretboardId);
   
   // Default sequence: four 1/4 notes to start with
   const [items, setItems] = useState<RhythmItem[]>(initialData.items || []);
@@ -254,7 +251,6 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
     if (initialData.subdivisions) setSubdivisions(initialData.subdivisions);
     if (initialData.beats) setBeats(initialData.beats);
     if (initialData.items) setItems(initialData.items);
-    if (initialData.linkedFretboardId !== undefined) setLinkedFretboardId(initialData.linkedFretboardId);
   }, [initialData]);
 
   // Calculate current total length of sequence in sixteenth parts
@@ -272,12 +268,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
 
   const handleTempoChange = (newTempo: number) => {
     setTempo(newTempo);
-    onSave({ timeSignature, tempo: newTempo, subdivisions, beats, items, linkedFretboardId });
-  };
-
-  const handleLinkFretboard = (targetId: string | undefined) => {
-    setLinkedFretboardId(targetId);
-    onSave({ timeSignature, tempo, subdivisions, beats, items, linkedFretboardId: targetId });
+    onSave({ timeSignature, tempo: newTempo, subdivisions, beats, items });
   };
 
   const addRhythmItem = (type: 'note' | 'rest', duration: string) => {
@@ -291,7 +282,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
 
     const updated = [...items, { type, duration }];
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
   };
 
   const toggleDotted = (index: number) => {
@@ -312,25 +303,25 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
 
     updated[index] = { ...item, duration: newDuration };
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
   };
 
   const toggleTied = (index: number) => {
     const updated = [...items];
     updated[index] = { ...updated[index], tied: !updated[index].tied };
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
   };
 
   const deleteRhythmItem = (index: number) => {
     const updated = items.filter((_, idx) => idx !== index);
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
   };
 
   const clearRhythm = () => {
     setItems([]);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: [], linkedFretboardId });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: [] });
   };
 
   // Rules of Beaming (stringing notes together continuously):
@@ -509,68 +500,6 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
             style={{ accentColor: 'var(--primary)', width: '100px', height: '4px' }}
           />
           <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', width: '55px', fontWeight: 600 }}>{tempo} BPM</span>
-        </div>
-
-        {/* Fret Board Association Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Link Fret Board:</span>
-          <select
-            value={linkedFretboardId || ''}
-            onChange={(e) => handleLinkFretboard(e.target.value || undefined)}
-            disabled={isPlayMode}
-            style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: linkedFretboardId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: 'var(--radius-sm)',
-              color: linkedFretboardId ? 'var(--primary)' : 'var(--text-main)',
-              fontSize: '0.8rem',
-              padding: '0.25rem 0.5rem',
-              cursor: isPlayMode ? 'not-allowed' : 'pointer',
-              outline: 'none'
-            }}
-          >
-            <option value="">(None)</option>
-            {allWidgets
-              .filter(w => w.widget_type === 'fret_board')
-              .map(w => (
-                <option key={w.id} value={w.id}>
-                  {w.data?.title || `Fret Board`}
-                </option>
-              ))
-            }
-          </select>
-          {linkedFretboardId && (
-            <button
-              type="button"
-              onClick={() => {
-                const el = document.getElementById(`widget-${linkedFretboardId}`);
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  el.style.outline = '3px solid var(--primary)';
-                  el.style.boxShadow = '0 0 25px rgba(99, 102, 241, 0.6)';
-                  el.style.borderRadius = 'var(--radius-lg)';
-                  el.style.transition = 'outline 0.15s ease, box-shadow 0.15s ease';
-                  setTimeout(() => {
-                    el.style.outline = '';
-                    el.style.boxShadow = '';
-                  }, 1500);
-                }
-              }}
-              style={{
-                background: 'rgba(99, 102, 241, 0.15)',
-                border: '1px solid var(--primary)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--primary)',
-                padding: '0.25rem 0.5rem',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }}
-              title="Show and flash linked Fret Board"
-            >
-              Go to Link
-            </button>
-          )}
         </div>
       </div>
 

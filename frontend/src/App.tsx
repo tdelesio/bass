@@ -1224,6 +1224,7 @@ export default function App() {
                                     tuning={selectedSong.tuning}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    allWidgets={currentPart.widgets}
                                   />
                                 )}
 
@@ -1397,6 +1398,7 @@ export default function App() {
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
                                     isPlayMode={true}
+                                    allWidgets={matchingWidgets}
                                   />
                                 )}
 

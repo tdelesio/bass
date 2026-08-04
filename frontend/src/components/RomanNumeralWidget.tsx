@@ -27,6 +27,27 @@ interface RomanNumeralWidgetProps {
   allWidgets?: any[];
 }
 
+const LINK_COLORS = [
+  '#a855f7', // Purple
+  '#f59e0b', // Amber/Orange
+  '#10b981', // Emerald Mint Green
+  '#3b82f6', // Bright Sky Blue
+  '#ec4899', // Hot Pink
+  '#06b6d4', // Cyan
+  '#84cc16', // Lime
+  '#6366f1', // Indigo
+];
+
+const getLinkColor = (id: string | undefined): string => {
+  if (!id) return 'rgba(255, 255, 255, 0.08)';
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % LINK_COLORS.length;
+  return LINK_COLORS[index];
+};
+
 const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const SCALES = ["major", "minor"];
 
@@ -276,9 +297,10 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         
+        const color = getLinkColor(item.linkedWidgetId);
         // Add neon outline visual focus pulse
-        el.style.outline = '3px solid var(--accent-purple)';
-        el.style.boxShadow = '0 0 25px rgba(168, 85, 247, 0.6)';
+        el.style.outline = `3px solid ${color}`;
+        el.style.boxShadow = `0 0 25px ${color}99`;
         el.style.borderRadius = 'var(--radius-lg)';
         el.style.transition = 'outline 0.15s ease, box-shadow 0.15s ease';
         
@@ -776,19 +798,25 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     width: '100%',
                                     background: isRest
                                       ? 'rgba(239, 68, 68, 0.04)'
-                                      : (item.octave 
-                                        ? 'rgba(234, 179, 8, 0.08)' 
-                                        : 'rgba(99, 102, 241, 0.08)'),
+                                      : (item.linkedWidgetId
+                                        ? `${getLinkColor(item.linkedWidgetId)}0f`
+                                        : (item.octave 
+                                          ? 'rgba(234, 179, 8, 0.08)' 
+                                          : 'rgba(99, 102, 241, 0.08)')),
                                     border: isRest
                                       ? '1px dashed rgba(239, 68, 68, 0.25)'
-                                      : (item.octave
-                                        ? '1px solid rgba(234, 179, 8, 0.35)'
-                                        : '1px solid rgba(99, 102, 241, 0.25)'),
+                                      : (item.linkedWidgetId
+                                        ? `1px solid ${getLinkColor(item.linkedWidgetId)}77`
+                                        : (item.octave
+                                          ? '1px solid rgba(234, 179, 8, 0.35)'
+                                          : '1px solid rgba(99, 102, 241, 0.25)')),
                                     boxShadow: isRest
                                       ? '0 0 10px rgba(239, 68, 68, 0.01)'
-                                      : (item.octave
-                                        ? '0 0 10px rgba(234, 179, 8, 0.05)'
-                                        : '0 0 10px rgba(99, 102, 241, 0.03)'),
+                                      : (item.linkedWidgetId
+                                        ? `0 0 10px ${getLinkColor(item.linkedWidgetId)}22`
+                                        : (item.octave
+                                          ? '0 0 10px rgba(234, 179, 8, 0.05)'
+                                          : '0 0 10px rgba(99, 102, 241, 0.03)')),
                                     padding: '0.2rem 0.15rem',
                                     borderRadius: 'var(--radius-sm)',
                                     display: 'flex',
@@ -811,7 +839,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                         top: '2px', 
                                         left: '4px', 
                                         fontSize: '0.5rem', 
-                                        color: 'var(--accent-purple)'
+                                        color: getLinkColor(item.linkedWidgetId)
                                       }}
                                       title="Linked to another widget (Click card to navigate)"
                                     >
@@ -924,10 +952,10 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                           handleLinkWidgetToCard(originalIdx, targetId);
                                         }}
                                         style={{
-                                          background: item.linkedWidgetId ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.02)',
-                                          border: item.linkedWidgetId ? '1px solid var(--accent-purple)' : '1px solid rgba(255,255,255,0.06)',
+                                          background: item.linkedWidgetId ? `${getLinkColor(item.linkedWidgetId)}26` : 'rgba(255,255,255,0.02)',
+                                          border: item.linkedWidgetId ? `1px solid ${getLinkColor(item.linkedWidgetId)}` : '1px solid rgba(255,255,255,0.06)',
                                           borderRadius: '2px',
-                                          color: item.linkedWidgetId ? 'var(--accent-purple)' : 'var(--text-dim)',
+                                          color: item.linkedWidgetId ? getLinkColor(item.linkedWidgetId) : 'var(--text-dim)',
                                           fontSize: '0.48rem',
                                           fontWeight: '700',
                                           cursor: 'pointer',
