@@ -5,6 +5,7 @@ interface ChordItem {
   numeral: string; // "I", "ii", "iii", or "\n"
   octave: boolean;
   duration: '1/8' | '1/4' | '1/2' | '1';
+  linkedWidgetId?: string;
 }
 
 interface RomanNumeralWidgetProps {
@@ -23,6 +24,7 @@ interface RomanNumeralWidgetProps {
     lineRepeats: Record<number, number> 
   }) => void;
   isPlayMode?: boolean;
+  allWidgets?: any[];
 }
 
 const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -121,16 +123,18 @@ const normalizeProgression = (prog: any[]): ChordItem[] => {
     return {
       numeral: item.numeral || 'I',
       octave: !!item.octave,
-      duration: item.duration || '1/4'
+      duration: item.duration || '1/4',
+      linkedWidgetId: item.linkedWidgetId
     };
   });
 };
 
-export default function RomanNumeralWidget({ widgetId, songKey, initialData, onSave, isPlayMode }: RomanNumeralWidgetProps) {
+export default function RomanNumeralWidget({ widgetId, songKey, initialData, onSave, isPlayMode, allWidgets = [] }: RomanNumeralWidgetProps) {
   const [key, setKey] = useState(initialData.key || songKey || 'C');
   const [scale, setScale] = useState(initialData.scale || 'major');
   const [progression, setProgression] = useState<ChordItem[]>(normalizeProgression(initialData.progression || []));
   const [lineRepeats, setLineRepeats] = useState<Record<number, number>>(initialData.lineRepeats || {});
+  const [selectedDuration, setSelectedDuration] = useState<'1/8' | '1/4' | '1/2' | '1'>('1/4');
 
   // Drag-to-Resize mouse tracking states
   const [resizeIndex, setResizeIndex] = useState<number | null>(null);
@@ -218,9 +222,17 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
   };
 
   const addNumeral = (numeral: string) => {
-    const newItem: ChordItem = { numeral, octave: false, duration: '1/4' }; // Default to 1/4 note
+    const newItem: ChordItem = { numeral, octave: false, duration: selectedDuration };
     const updated = [...progression, newItem];
     saveWidgetState(updated, lineRepeats);
+  };
+
+  const addCustomChord = () => {
+    const val = prompt("Enter custom chord or note (max 4 characters, e.g. C/C#):");
+    if (val && val.trim()) {
+      const cleanVal = val.trim().slice(0, 4);
+      addNumeral(cleanVal);
+    }
   };
 
   const addCarriageReturn = () => {
@@ -241,6 +253,52 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
       octave: !updated[idx].octave
     };
     saveWidgetState(updated, lineRepeats);
+  };
+
+  const handleLinkWidgetToCard = (idx: number, targetWidgetId: string | undefined) => {
+    const updated = [...progression];
+    updated[idx] = {
+      ...updated[idx],
+      linkedWidgetId: targetWidgetId
+    };
+    setProgression(updated);
+    onSave({
+      key,
+      scale,
+      progression: updated,
+      lineRepeats
+    });
+  };
+
+  const handleCardInteraction = (item: ChordItem) => {
+    if (item.linkedWidgetId) {
+      const el = document.getElementById(`widget-${item.linkedWidgetId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Add neon outline visual focus pulse
+        el.style.outline = '3px solid var(--accent-purple)';
+        el.style.boxShadow = '0 0 25px rgba(168, 85, 247, 0.6)';
+        el.style.borderRadius = 'var(--radius-lg)';
+        el.style.transition = 'outline 0.15s ease, box-shadow 0.15s ease';
+        
+        setTimeout(() => {
+          el.style.outline = '';
+          el.style.boxShadow = '';
+        }, 1500);
+      }
+    }
+  };
+
+  const getWidgetLabel = (w: any) => {
+    const customTitle = w.data?.title;
+    if (customTitle) return customTitle;
+    
+    if (w.widget_type === 'fret_board') return 'Fret Board';
+    if (w.widget_type === 'rhythm') return 'Rhythm';
+    if (w.widget_type === 'note') return 'Notepad';
+    if (w.widget_type === 'roman_numeral') return 'Progression';
+    return 'Widget';
   };
 
   const deleteNumeralAtIndex = (idxToRemove: number) => {
@@ -416,9 +474,29 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
               </select>
             </div>
 
+            {/* Note Duration/Size Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', marginLeft: 'auto', marginRight: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginRight: '0.2rem' }}>Add Size:</span>
+              {(['1/8', '1/4', '1/2', '1'] as const).map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`btn ${selectedDuration === d ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ 
+                    padding: '0.25rem 0.5rem', 
+                    fontSize: '0.75rem',
+                    minWidth: '32px'
+                  }}
+                  onClick={() => setSelectedDuration(d)}
+                >
+                  {d === '1' ? '1' : d}
+                </button>
+              ))}
+            </div>
+
             <button 
               className="btn btn-secondary" 
-              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }} 
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} 
               onClick={clearProgression}
             >
               Clear Progression
@@ -548,6 +626,31 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{chord}</span>
                   </button>
                 ))}
+                {/* Custom Button */}
+                <button
+                  type="button"
+                  onClick={addCustomChord}
+                  style={{
+                    background: 'rgba(168, 85, 247, 0.02)', // purple tint
+                    border: '1px solid rgba(168, 85, 247, 0.15)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.45rem',
+                    minWidth: '60px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.2rem',
+                    transition: 'all 0.15s ease',
+                    flex: 1
+                  }}
+                  className="interactive-accidental-degree"
+                  title="Click to add custom chord/note (up to 4 chars)"
+                >
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-purple)' }}>Custom</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Text</span>
+                </button>
                 {/* Empty space-separator to align with the "New Line" button above */}
                 <div style={{ minWidth: '70px', flex: 0 }} />
               </div>
@@ -617,7 +720,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                           const isRest = item.numeral === 'REST';
                           const matchingDegree = !isRest ? (diatonicChords.find(d => d.numeral === item.numeral) 
                             || accidentalChords.find(d => d.numeral === item.numeral)) : null;
-                          const chordName = isRest ? '' : (matchingDegree ? matchingDegree.chord : '?');
+                          const chordName = isRest ? '' : (matchingDegree ? matchingDegree.chord : item.numeral);
 
                           const durationMeta = DURATION_METADATA[item.duration] || DURATION_METADATA['1/4'];
                           accumulatedBeats += durationMeta.beats;
@@ -667,8 +770,8 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
 
                                 {/* The Card Box itself */}
                                 <div 
-                                  onClick={isPlayMode ? undefined : () => toggleOctaveShift(originalIdx)}
-                                  title={isPlayMode ? undefined : "Single click = Toggle Octave (Hover 1s for delete button)"}
+                                  onClick={() => handleCardInteraction(item)}
+                                  title={item.linkedWidgetId ? "Click to focus linked widget" : undefined}
                                   style={{
                                     width: '100%',
                                     background: isRest
@@ -693,19 +796,35 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     position: 'relative',
-                                    cursor: isPlayMode ? 'default' : 'pointer',
+                                    cursor: item.linkedWidgetId ? 'pointer' : (isPlayMode ? 'default' : 'pointer'),
                                     userSelect: 'none',
-                                    height: '32px',
+                                    height: '52px',
                                     transition: 'border-color 0.15s ease, background 0.15s ease'
                                   }}
-                                  className="progression-block"
+                                  className={`progression-block ${item.linkedWidgetId ? 'linked-glow' : ''}`}
                                 >
+                                  {/* Floating link status icon */}
+                                  {item.linkedWidgetId && (
+                                    <span 
+                                      style={{ 
+                                        position: 'absolute', 
+                                        top: '2px', 
+                                        left: '4px', 
+                                        fontSize: '0.5rem', 
+                                        color: 'var(--accent-purple)'
+                                      }}
+                                      title="Linked to another widget (Click card to navigate)"
+                                    >
+                                      🔗
+                                    </span>
+                                  )}
+
                                   {/* Floating delete button appearing on 1s hover */}
                                   {!isPlayMode && (
                                     <button
                                       className="chord-delete-btn"
                                       onClick={(e) => {
-                                        e.stopPropagation(); // Avoid triggering octave shift click
+                                        e.stopPropagation();
                                         deleteNumeralAtIndex(originalIdx);
                                       }}
                                       title="Delete this chord card"
@@ -735,7 +854,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                   )}
 
                                   {/* Centered Roman Numeral inside the box */}
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', flex: 1, marginTop: '2px' }}>
                                     <span style={{ 
                                       fontSize: isRest ? '1.1rem' : (durationMeta.width < 50 ? '0.72rem' : '0.85rem'), 
                                       fontWeight: 800, 
@@ -746,11 +865,11 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     </span>
                                   </div>
 
-                                  {/* Floating duration micro-badge */}
+                                  {/* Floating duration micro-badge (at top right) */}
                                   {durationMeta.width >= 35 && (
                                     <span style={{ 
                                       position: 'absolute', 
-                                      bottom: '2px', 
+                                      top: '2px', 
                                       right: '4px', 
                                       fontSize: '0.45rem', 
                                       color: isRest ? 'rgba(239,68,68,0.4)' : 'var(--text-dim)', 
@@ -758,6 +877,81 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                     }}>
                                       {durationMeta.label}
                                     </span>
+                                  )}
+
+                                  {/* Actions Row */}
+                                  {!isPlayMode && !isRest && item.numeral !== '\n' && (
+                                    <div 
+                                      style={{ 
+                                        display: 'flex', 
+                                        gap: '2px', 
+                                        width: '100%', 
+                                        justifyContent: 'center', 
+                                        marginTop: 'auto',
+                                        zIndex: 8,
+                                        padding: '0 2px 2px 2px'
+                                      }}
+                                      onClick={(e) => e.stopPropagation()} // Stop triggering parent click
+                                    >
+                                      {/* Octave Shift Button */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleOctaveShift(originalIdx);
+                                        }}
+                                        style={{
+                                          background: item.octave ? 'rgba(234, 179, 8, 0.15)' : 'rgba(255,255,255,0.02)',
+                                          border: item.octave ? '1px solid #eab308' : '1px solid rgba(255,255,255,0.06)',
+                                          borderRadius: '2px',
+                                          color: item.octave ? '#eab308' : 'var(--text-dim)',
+                                          padding: '1px 2px',
+                                          fontSize: '0.48rem',
+                                          fontWeight: '700',
+                                          cursor: 'pointer',
+                                          lineHeight: 1
+                                        }}
+                                        title="Toggle Octave Shift (+1 Octave)"
+                                      >
+                                        Oct
+                                      </button>
+
+                                      {/* Link Association Selector */}
+                                      <select
+                                        value={item.linkedWidgetId || ''}
+                                        onChange={(e) => {
+                                          const targetId = e.target.value || undefined;
+                                          handleLinkWidgetToCard(originalIdx, targetId);
+                                        }}
+                                        style={{
+                                          background: item.linkedWidgetId ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.02)',
+                                          border: item.linkedWidgetId ? '1px solid var(--accent-purple)' : '1px solid rgba(255,255,255,0.06)',
+                                          borderRadius: '2px',
+                                          color: item.linkedWidgetId ? 'var(--accent-purple)' : 'var(--text-dim)',
+                                          fontSize: '0.48rem',
+                                          fontWeight: '700',
+                                          cursor: 'pointer',
+                                          lineHeight: 1,
+                                          padding: '0',
+                                          maxWidth: '100%',
+                                          textAlign: 'center'
+                                        }}
+                                        title="Link this chord to another widget"
+                                      >
+                                        <option value="">Link</option>
+                                        {allWidgets
+                                          .filter(w => w.id !== widgetId) // Exclude current widget
+                                          .map(w => {
+                                            const wMeta = getWidgetLabel(w);
+                                            return (
+                                              <option key={w.id} value={w.id}>
+                                                {wMeta}
+                                              </option>
+                                            );
+                                          })
+                                        }
+                                      </select>
+                                    </div>
                                   )}
 
                                   {/* Translucent Right-Edge Drag-To-Resize Handle */}
@@ -778,7 +972,7 @@ export default function RomanNumeralWidget({ widgetId, songKey, initialData, onS
                                         zIndex: 5
                                       }}
                                       className="resize-handle"
-                                      onClick={(e) => e.stopPropagation()} // Prevent triggering octave shift click
+                                      onClick={(e) => e.stopPropagation()}
                                     />
                                   )}
                                 </div>

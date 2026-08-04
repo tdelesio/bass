@@ -9,6 +9,40 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Active Server-Sent Events (SSE) Client Connections for real-time synchronization
+let clients: Response[] = [];
+
+// Helper to broadcast changes instantly to all connected browser windows
+const broadcastUpdate = (type: string, payload: any) => {
+  const data = JSON.stringify({ type, ...payload });
+  clients.forEach(client => {
+    try {
+      client.write(`data: ${data}\n\n`);
+    } catch (err) {
+      // Clean up failed connections silently
+    }
+  });
+};
+
+// SSE updates registration route
+app.get('/api/updates', (req: Request, res: Response) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Content-Encoding': 'none'
+  });
+
+  // Keep connection alive with immediate feedback
+  res.write('data: {"status":"connected"}\n\n');
+
+  clients.push(res);
+
+  req.on('close', () => {
+    clients = clients.filter(c => c !== res);
+  });
+});
+
 // Database connection configuration
 const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/bass_lessons';
 const pool = new Pool({
@@ -141,7 +175,9 @@ app.post('/api/songs', async (req: Request, res: Response) => {
       'INSERT INTO songs (title, artist, tuning, key_signature) VALUES ($1, $2, $3, $4) RETURNING *',
       [title, artist, tuning || 'Standard (EADG)', key_signature || 'C Major']
     );
-    res.status(201).json(result.rows[0]);
+    const song = result.rows[0];
+    broadcastUpdate('song_created', { song });
+    res.status(201).json(song);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create song' });
@@ -156,6 +192,7 @@ app.delete('/api/songs/:id', async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Song not found' });
     }
+    broadcastUpdate('song_deleted', { id });
     res.json({ message: 'Song deleted successfully', song: result.rows[0] });
   } catch (err: any) {
     console.error(err);
@@ -219,7 +256,9 @@ app.put('/api/songs/:id', async (req: Request, res: Response) => {
       'UPDATE songs SET title = $1, artist = $2, tuning = $3, key_signature = $4, folder_id = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
       [newTitle, newArtist, newTuning, newKeySig, newFolderId, id]
     );
-    res.json(result.rows[0]);
+    const song = result.rows[0];
+    broadcastUpdate('song_updated', { song });
+    res.json(song);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update song' });
@@ -252,7 +291,9 @@ app.post('/api/folders', async (req: Request, res: Response) => {
       'INSERT INTO folders (name) VALUES ($1) RETURNING *',
       [name]
     );
-    res.status(201).json(result.rows[0]);
+    const folder = result.rows[0];
+    broadcastUpdate('folder_created', { folder });
+    res.status(201).json(folder);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create folder' });
@@ -274,7 +315,9 @@ app.put('/api/folders/:id', async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Folder not found' });
     }
-    res.json(result.rows[0]);
+    const folder = result.rows[0];
+    broadcastUpdate('folder_updated', { folder });
+    res.json(folder);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update folder' });
@@ -289,6 +332,7 @@ app.delete('/api/folders/:id', async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Folder not found' });
     }
+    broadcastUpdate('folder_deleted', { id });
     res.json({ message: 'Folder deleted successfully', folder: result.rows[0] });
   } catch (err: any) {
     console.error(err);
@@ -323,7 +367,9 @@ app.post('/api/songs/:id/parts', async (req: Request, res: Response) => {
       [song_id, part_type, targetIndex]
     );
 
-    res.status(201).json(result.rows[0]);
+    const part = result.rows[0];
+    broadcastUpdate('part_created', { part, song_id });
+    res.status(201).json(part);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create song part' });
@@ -338,7 +384,9 @@ app.delete('/api/parts/:id', async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Song part not found' });
     }
-    res.json({ message: 'Song part deleted successfully', part: result.rows[0] });
+    const part = result.rows[0];
+    broadcastUpdate('part_deleted', { id, song_id: part.song_id });
+    res.json({ message: 'Song part deleted successfully', part });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete song part' });
@@ -385,7 +433,9 @@ app.post('/api/parts/:partId/widgets', async (req: Request, res: Response) => {
       [part_id, widget_type, targetIndex, JSON.stringify(defaultData)]
     );
 
-    res.status(201).json(result.rows[0]);
+    const widget = result.rows[0];
+    broadcastUpdate('widget_created', { widget, part_id });
+    res.status(201).json(widget);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to add widget to part' });
@@ -422,7 +472,9 @@ app.put('/api/widgets/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Widget not found' });
     }
 
-    res.json(result.rows[0]);
+    const widget = result.rows[0];
+    broadcastUpdate('widget_updated', { widget });
+    res.json(widget);
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update widget' });
@@ -437,7 +489,9 @@ app.delete('/api/widgets/:id', async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Widget not found' });
     }
-    res.json({ message: 'Widget deleted successfully', widget: result.rows[0] });
+    const widget = result.rows[0];
+    broadcastUpdate('widget_deleted', { id, part_id: widget.part_id });
+    res.json({ message: 'Widget deleted successfully', widget });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete widget' });
@@ -524,6 +578,7 @@ app.post('/api/restore', async (req: Request, res: Response) => {
 
 
     await client.query('COMMIT');
+    broadcastUpdate('restore', {});
     res.json({ 
       message: 'Database restored successfully!', 
       foldersCount: folders.length,

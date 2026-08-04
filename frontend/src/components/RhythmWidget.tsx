@@ -3,7 +3,8 @@ import { Play, Square, Info, Trash2 } from 'lucide-react';
 
 interface RhythmItem {
   type: 'note' | 'rest';
-  duration: '1/16' | '1/8' | '1/4' | '1/2' | '1';
+  duration: string;
+  tied?: boolean;
 }
 
 interface RhythmWidgetProps {
@@ -14,6 +15,7 @@ interface RhythmWidgetProps {
     subdivisions?: number;
     beats?: boolean[];
     items?: RhythmItem[];
+    linkedFretboardId?: string;
   };
   onSave: (data: { 
     timeSignature: string; 
@@ -21,177 +23,223 @@ interface RhythmWidgetProps {
     subdivisions: number; 
     beats: boolean[];
     items: RhythmItem[];
+    linkedFretboardId?: string;
   }) => void;
   isPlayMode?: boolean;
+  allWidgets?: any[];
 }
 
 const DURATION_BEATS: Record<string, number> = {
   '1/16': 0.25,
   '1/8': 0.5,
+  '1/8.': 0.75,
   '1/4': 1.0,
+  '1/4.': 1.5,
   '1/2': 2.0,
-  '1': 4.0 // Whole note
+  '1/2.': 3.0,
+  '1': 4.0,
+  '1.': 6.0
 };
 
 const DURATION_LABELS: Record<string, string> = {
   '1/16': '1/16',
   '1/8': '1/8',
+  '1/8.': '1/8 .',
   '1/4': '1/4',
+  '1/4.': '1/4 .',
   '1/2': '1/2',
-  '1': 'Whole'
+  '1/2.': '1/2 .',
+  '1': 'Whole',
+  '1.': 'Whole .'
 };
 
 const DURATION_WIDTHS: Record<string, number> = {
   '1/16': 54,
   '1/8': 68,
+  '1/8.': 82,
   '1/4': 90,
+  '1/4.': 115,
   '1/2': 140,
-  '1': 220
+  '1/2.': 180,
+  '1': 220,
+  '1.': 260
 };
 
 const ITEM_SIXTEENTHS: Record<string, number> = {
   '1/16': 1,
   '1/8': 2,
+  '1/8.': 3,
   '1/4': 4,
+  '1/4.': 6,
   '1/2': 8,
-  '1': 16
+  '1/2.': 12,
+  '1': 16,
+  '1.': 24
 };
 
 // Colors matching the diagram aesthetics
-const RHYTHM_COLORS = {
+const RHYTHM_COLORS: Record<string, Record<string, string>> = {
   note: {
     '1/16': '#a2628b', // Plum
     '1/8': '#52796f',  // Sage
+    '1/8.': '#5fa08d', // Sage Light
     '1/4': '#415a77',  // Slate
+    '1/4.': '#567a9a', // Slate Light
     '1/2': '#d97706',  // Amber
-    '1': '#b91c1c'     // Brick Red
+    '1/2.': '#f59e0b', // Amber Light
+    '1': '#b91c1c',    // Brick Red
+    '1.': '#ef4444'     // Brick Red Light
   },
   rest: {
     '1/16': '#7e537e',
     '1/8': '#43615e',
+    '1/8.': '#507572',
     '1/4': '#35495e',
+    '1/4.': '#435e7d',
     '1/2': '#c25e1a',
-    '1': '#9e2a2b'
+    '1/2.': '#d97706',
+    '1': '#9e2a2b',
+    '1.': '#c2410c'
   }
 };
 
 const renderRhythmIcon = (type: 'note' | 'rest', duration: string, size = 22, color = 'currentColor', isBeamed = false) => {
-  if (type === 'note') {
-    switch (duration) {
-      case '1': // Whole Note (tilted hollow oval)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" style={{ display: 'block' }}>
-            <ellipse cx="12" cy="12" rx="7" ry="4.5" transform="rotate(-20 12 12)" />
-          </svg>
-        );
-      case '1/2': // Half Note (hollow oval with vertical stem)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <ellipse cx="9" cy="15" rx="5" ry="3.5" transform="rotate(-20 9 15)" />
-            <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
-          </svg>
-        );
-      case '1/4': // Quarter Note (filled oval with vertical stem)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
-            <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
-          </svg>
-        );
-      case '1/8': // Eighth Note
-        if (isBeamed) {
-          // Longer stem to touch the horizontal beaming line at the top
+  const isDotted = duration.endsWith('.');
+  const baseDuration = isDotted ? duration.slice(0, -1) : duration;
+
+  const renderBaseIcon = () => {
+    if (type === 'note') {
+      switch (baseDuration) {
+        case '1': // Whole Note (tilted hollow oval)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" style={{ display: 'block' }}>
+              <ellipse cx="12" cy="12" rx="7" ry="4.5" transform="rotate(-20 12 12)" />
+            </svg>
+          );
+        case '1/2': // Half Note (hollow oval with vertical stem)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <ellipse cx="9" cy="15" rx="5" ry="3.5" transform="rotate(-20 9 15)" />
+              <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
+            </svg>
+          );
+        case '1/4': // Quarter Note (filled oval with vertical stem)
           return (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
               <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
-              <line x1="14" y1="15" x2="14" y2="1.5" strokeLinecap="round" />
+              <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
             </svg>
           );
-        }
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
-            <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
-            <path d="M14,4 C17,7 16,10 19,11" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        );
-      case '1/16': // Sixteenth Note
-        if (isBeamed) {
+        case '1/8': // Eighth Note
+          if (isBeamed) {
+            // Longer stem to touch the horizontal beaming line at the top
+            return (
+              <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+                <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
+                <line x1="14" y1="15" x2="14" y2="1.5" strokeLinecap="round" />
+              </svg>
+            );
+          }
           return (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
               <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
-              <line x1="14" y1="15" x2="14" y2="1.5" strokeLinecap="round" />
+              <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
+              <path d="M14,4 C17,7 16,10 19,11" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           );
-        }
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
-            <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
-            <path d="M14,4 C17,7 16,10 19,11" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M14,7 C17,10 16,13 19,14" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        );
+        case '1/16': // Sixteenth Note
+          if (isBeamed) {
+            return (
+              <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+                <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
+                <line x1="14" y1="15" x2="14" y2="1.5" strokeLinecap="round" />
+              </svg>
+            );
+          }
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <ellipse cx="9" cy="15" rx="5" ry="3.5" fill={color} transform="rotate(-20 9 15)" />
+              <line x1="14" y1="15" x2="14" y2="4" strokeLinecap="round" />
+              <path d="M14,4 C17,7 16,10 19,11" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14,7 C17,10 16,13 19,14" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          );
+      }
+    } else {
+      // RESTS
+      switch (baseDuration) {
+        case '1': // Whole Rest (hangs below staff line)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <line x1="4" y1="10" x2="20" y2="10" strokeLinecap="round" />
+              <rect x="8" y="10" width="8" height="5" fill={color} />
+            </svg>
+          );
+        case '1/2': // Half Rest (sits above staff line like a hat)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <line x1="4" y1="14" x2="20" y2="14" strokeLinecap="round" />
+              <rect x="8" y="9" width="8" height="5" fill={color} />
+            </svg>
+          );
+        case '1/4': // Quarter Rest (lightning squiggly)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <path d="M10,4 L14,8 C11,11 10,12 13,15 C10,17 9,18 12,20" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          );
+        case '1/8': // Eighth Rest (slash with top-left hook)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <line x1="10" y1="18" x2="15" y2="6" strokeLinecap="round" />
+              <circle cx="9" cy="8" r="2" fill={color} />
+              <path d="M9,6 C11,6 12,8 14,9" strokeLinecap="round" />
+            </svg>
+          );
+        case '1/16': // Sixteenth Rest (slash with 2 hooks)
+          return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
+              <line x1="9" y1="20" x2="15" y2="5" strokeLinecap="round" />
+              <circle cx="9" cy="8" r="1.8" fill={color} />
+              <path d="M9,6 C11,6 12,8 14,9" strokeLinecap="round" />
+              <circle cx="7" cy="13" r="1.8" fill={color} />
+              <path d="M7,11 C9,11 10,13 12,14" strokeLinecap="round" />
+            </svg>
+          );
+      }
     }
-  } else {
-    // RESTS
-    switch (duration) {
-      case '1': // Whole Rest (hangs below staff line)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <line x1="4" y1="10" x2="20" y2="10" strokeLinecap="round" />
-            <rect x="8" y="10" width="8" height="5" fill={color} />
-          </svg>
-        );
-      case '1/2': // Half Rest (sits above staff line like a hat)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <line x1="4" y1="14" x2="20" y2="14" strokeLinecap="round" />
-            <rect x="8" y="9" width="8" height="5" fill={color} />
-          </svg>
-        );
-      case '1/4': // Quarter Rest (lightning squiggly)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <path d="M10,4 L14,8 C11,11 10,12 13,15 C10,17 9,18 12,20" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        );
-      case '1/8': // Eighth Rest (slash with top-left hook)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <line x1="10" y1="18" x2="15" y2="6" strokeLinecap="round" />
-            <circle cx="9" cy="8" r="2" fill={color} />
-            <path d="M9,6 C11,6 12,8 14,9" strokeLinecap="round" />
-          </svg>
-        );
-      case '1/16': // Sixteenth Rest (slash with 2 hooks)
-        return (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ display: 'block' }}>
-            <line x1="9" y1="20" x2="15" y2="5" strokeLinecap="round" />
-            <circle cx="9" cy="8" r="1.8" fill={color} />
-            <path d="M9,6 C11,6 12,8 14,9" strokeLinecap="round" />
-            <circle cx="7" cy="13" r="1.8" fill={color} />
-            <path d="M7,11 C9,11 10,13 12,14" strokeLinecap="round" />
-          </svg>
-        );
-    }
+    return null;
+  };
+
+  if (!isDotted) {
+    return renderBaseIcon();
   }
-  return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+      {renderBaseIcon()}
+      <span style={{ 
+        color, 
+        fontSize: '1.25rem', 
+        fontWeight: 'bold', 
+        lineHeight: 1, 
+        marginLeft: '-2px', 
+        marginRight: '2px',
+        marginTop: type === 'note' && baseDuration !== '1' ? '6px' : '0px'
+      }}>•</span>
+    </div>
+  );
 };
 
-export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode }: RhythmWidgetProps) {
+export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode, allWidgets = [] }: RhythmWidgetProps) {
   const [timeSignature, setTimeSignature] = useState(initialData.timeSignature || '4/4');
   const [tempo, setTempo] = useState(initialData.tempo || 100);
   const [subdivisions, setSubdivisions] = useState(initialData.subdivisions || 4);
   const [beats, setBeats] = useState<boolean[]>(initialData.beats || Array(16).fill(false));
+  const [linkedFretboardId, setLinkedFretboardId] = useState<string | undefined>(initialData.linkedFretboardId);
   
   // Default sequence: four 1/4 notes to start with
-  const [items, setItems] = useState<RhythmItem[]>(initialData.items || [
-    { type: 'note', duration: '1/4' },
-    { type: 'note', duration: '1/4' },
-    { type: 'note', duration: '1/4' },
-    { type: 'note', duration: '1/4' }
-  ]);
+  const [items, setItems] = useState<RhythmItem[]>(initialData.items || []);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
@@ -206,6 +254,7 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
     if (initialData.subdivisions) setSubdivisions(initialData.subdivisions);
     if (initialData.beats) setBeats(initialData.beats);
     if (initialData.items) setItems(initialData.items);
+    if (initialData.linkedFretboardId !== undefined) setLinkedFretboardId(initialData.linkedFretboardId);
   }, [initialData]);
 
   // Calculate current total length of sequence in sixteenth parts
@@ -223,32 +272,65 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
 
   const handleTempoChange = (newTempo: number) => {
     setTempo(newTempo);
-    onSave({ timeSignature, tempo: newTempo, subdivisions, beats, items });
+    onSave({ timeSignature, tempo: newTempo, subdivisions, beats, items, linkedFretboardId });
   };
 
-  const addRhythmItem = (type: 'note' | 'rest', duration: '1/16' | '1/8' | '1/4' | '1/2' | '1') => {
+  const handleLinkFretboard = (targetId: string | undefined) => {
+    setLinkedFretboardId(targetId);
+    onSave({ timeSignature, tempo, subdivisions, beats, items, linkedFretboardId: targetId });
+  };
+
+  const addRhythmItem = (type: 'note' | 'rest', duration: string) => {
     const itemValue = ITEM_SIXTEENTHS[duration];
     
-    // Prevent adding more items if it would exceed 1 Whole Note (16 sixteenth units)
-    if (totalSixteenths + itemValue > 16) {
-      alert(`⚠️ Cannot add: This would exceed the 1/1 Whole Note measure limit!\n\nCurrent measure size: ${getSimplestFraction(totalSixteenths)}\nAdding note value: ${DURATION_LABELS[duration]}`);
+    // Prevent adding more items if it would exceed 2 Whole Notes (32 sixteenth units)
+    if (totalSixteenths + itemValue > 32) {
+      alert(`⚠️ Cannot add: This would exceed the 2-measure limit (32 sixteenths)!\n\nCurrent grid size: ${getSimplestFraction(totalSixteenths)}\nAdding note value: ${DURATION_LABELS[duration]}`);
       return;
     }
 
     const updated = [...items, { type, duration }];
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+  };
+
+  const toggleDotted = (index: number) => {
+    const updated = [...items];
+    const item = updated[index];
+    const isDotted = item.duration.endsWith('.');
+    const baseDuration = isDotted ? item.duration.slice(0, -1) : item.duration;
+    const newDuration = isDotted ? baseDuration : `${baseDuration}.`;
+
+    const currentSixteenths = ITEM_SIXTEENTHS[item.duration];
+    const newSixteenths = ITEM_SIXTEENTHS[newDuration];
+    const difference = newSixteenths - currentSixteenths;
+
+    if (totalSixteenths + difference > 32) {
+      alert(`⚠️ Cannot toggle dot: This would exceed the 2-measure limit (32 sixteenths)!`);
+      return;
+    }
+
+    updated[index] = { ...item, duration: newDuration };
+    setItems(updated);
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
+  };
+
+  const toggleTied = (index: number) => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], tied: !updated[index].tied };
+    setItems(updated);
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
   };
 
   const deleteRhythmItem = (index: number) => {
     const updated = items.filter((_, idx) => idx !== index);
     setItems(updated);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: updated });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: updated, linkedFretboardId });
   };
 
   const clearRhythm = () => {
     setItems([]);
-    onSave({ timeSignature, tempo, subdivisions, beats, items: [] });
+    onSave({ timeSignature, tempo, subdivisions, beats, items: [], linkedFretboardId });
   };
 
   // Rules of Beaming (stringing notes together continuously):
@@ -293,7 +375,9 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
       let frequency = 800;
       let decay = 0.1;
 
-      switch (duration) {
+      const baseDuration = duration.endsWith('.') ? duration.slice(0, -1) : duration;
+
+      switch (baseDuration) {
         case '1/16':
           frequency = 1100;
           decay = 0.04;
@@ -350,8 +434,11 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
     const tick = () => {
       setCurrentStep(currentIndex);
       const currentItem = items[currentIndex];
+      const prevIndex = currentIndex === 0 ? items.length - 1 : currentIndex - 1;
+      const prevItem = items[prevIndex];
+      const isTiedTo = prevItem && prevItem.type === 'note' && prevItem.tied;
 
-      if (currentItem.type === 'note') {
+      if (currentItem.type === 'note' && !isTiedTo) {
         const isAccent = currentIndex % 4 === 0;
         playRhythmAudio(currentItem.duration, isAccent);
       }
@@ -423,6 +510,68 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
           />
           <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', width: '55px', fontWeight: 600 }}>{tempo} BPM</span>
         </div>
+
+        {/* Fret Board Association Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Link Fret Board:</span>
+          <select
+            value={linkedFretboardId || ''}
+            onChange={(e) => handleLinkFretboard(e.target.value || undefined)}
+            disabled={isPlayMode}
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: linkedFretboardId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 'var(--radius-sm)',
+              color: linkedFretboardId ? 'var(--primary)' : 'var(--text-main)',
+              fontSize: '0.8rem',
+              padding: '0.25rem 0.5rem',
+              cursor: isPlayMode ? 'not-allowed' : 'pointer',
+              outline: 'none'
+            }}
+          >
+            <option value="">(None)</option>
+            {allWidgets
+              .filter(w => w.widget_type === 'fret_board')
+              .map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.data?.title || `Fret Board`}
+                </option>
+              ))
+            }
+          </select>
+          {linkedFretboardId && (
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById(`widget-${linkedFretboardId}`);
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.style.outline = '3px solid var(--primary)';
+                  el.style.boxShadow = '0 0 25px rgba(99, 102, 241, 0.6)';
+                  el.style.borderRadius = 'var(--radius-lg)';
+                  el.style.transition = 'outline 0.15s ease, box-shadow 0.15s ease';
+                  setTimeout(() => {
+                    el.style.outline = '';
+                    el.style.boxShadow = '';
+                  }, 1500);
+                }
+              }}
+              style={{
+                background: 'rgba(99, 102, 241, 0.15)',
+                border: '1px solid var(--primary)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--primary)',
+                padding: '0.25rem 0.5rem',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+              title="Show and flash linked Fret Board"
+            >
+              Go to Link
+            </button>
+          )}
+        </div>
       </div>
 
       {!isPlayMode && (
@@ -439,16 +588,16 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)' }}>
-                Measure Capacity Progress:
+                Measure Capacity Progress (2 Bars Max):
               </span>
               <span style={{ 
                 fontSize: '0.85rem', 
                 fontWeight: 'bold', 
-                color: totalSixteenths === 16 ? 'var(--primary)' : 'var(--text-main)',
-                filter: totalSixteenths === 16 ? 'drop-shadow(0 0 6px var(--primary-glow))' : 'none',
+                color: totalSixteenths === 32 ? 'var(--primary)' : 'var(--text-main)',
+                filter: totalSixteenths === 32 ? 'drop-shadow(0 0 6px var(--primary-glow))' : 'none',
                 transition: 'all 0.2s ease'
               }}>
-                {getSimplestFraction(totalSixteenths)} {totalSixteenths === 16 ? 'Whole Note (Measure Full! 🏆)' : '/ 1 Whole Note'}
+                {getSimplestFraction(totalSixteenths)} {totalSixteenths === 32 ? '2 Measures Full! 🏆' : '/ 2 Whole Notes (2 Bars)'}
               </span>
             </div>
             
@@ -461,12 +610,12 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
               overflow: 'hidden'
             }}>
               <div style={{
-                width: `${(totalSixteenths / 16) * 100}%`,
+                width: `${(totalSixteenths / 32) * 100}%`,
                 height: '100%',
-                background: totalSixteenths === 16 
+                background: totalSixteenths === 32 
                   ? 'linear-gradient(90deg, var(--primary) 0%, #10b981 100%)' 
                   : 'linear-gradient(90deg, var(--secondary) 0%, var(--primary) 100%)',
-                boxShadow: totalSixteenths === 16 ? '0 0 8px #10b981' : 'none',
+                boxShadow: totalSixteenths === 32 ? '0 0 8px #10b981' : 'none',
                 borderRadius: '3px',
                 transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease'
               }} />
@@ -573,8 +722,9 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
             <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontStyle: 'italic', margin: 'auto' }}>
               Sequence Empty. Click Add Note or Add Rest above to compose your rhythm!
             </span>
-          ) : (
-            items.map((item, idx) => {
+          ) : (() => {
+            let accumulatedSixteenths = 0;
+            return items.map((item, idx) => {
               const isCurrent = currentStep === idx;
               const width = DURATION_WIDTHS[item.duration] || 80;
               const label = DURATION_LABELS[item.duration];
@@ -585,150 +735,245 @@ export default function RhythmWidget({ widgetId, initialData, onSave, isPlayMode
               const beamRight = canBeamToRight(idx);
               const isBeamed = beamLeft || beamRight;
 
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    position: 'relative',
-                    width: `${width}px`,
-                    height: '64px',
-                    borderRadius: 'var(--radius-md)',
-                    background: isCurrent
-                      ? 'rgba(6, 182, 212, 0.15)'
-                      : item.type === 'note'
-                        ? 'rgba(255, 255, 255, 0.02)'
-                        : 'rgba(255, 255, 255, 0.01)',
-                    border: isCurrent
-                      ? '2px solid var(--secondary)'
-                      : item.type === 'note'
-                        ? `1px solid ${color}40`
-                        : `1px dashed ${color}30`,
-                    boxShadow: isCurrent 
-                      ? '0 0 15px var(--secondary-glow)' 
-                      : 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.5rem 0.3rem 0.4rem 0.3rem',
-                    cursor: isPlayMode ? 'default' : 'pointer',
-                    userSelect: 'none',
-                    flexShrink: 0,
-                    transition: 'all 0.15s ease'
-                  }}
-                  className="rhythm-block"
-                  title={`${item.type === 'note' ? 'Note' : 'Rest'} (${label})`}
-                >
-                  {/* Floating delete button appearing on 1s hover */}
-                  {!isPlayMode && (
-                    <button
-                      className="rhythm-delete-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteRhythmItem(idx);
-                      }}
-                      title="Delete this block"
-                      style={{
-                        position: 'absolute',
-                        top: '-6px',
-                        right: '-6px',
-                        background: 'var(--accent-red)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '15px',
-                        height: '15px',
-                        fontSize: '0.55rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
-                        zIndex: 10,
-                        padding: 0,
-                        lineHeight: 1
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
+              const isDotted = item.duration.endsWith('.');
+              const startSixteenths = accumulatedSixteenths;
+              const itemSixteenths = ITEM_SIXTEENTHS[item.duration] || 4;
+              accumulatedSixteenths += itemSixteenths;
 
-                  {/* Horizontal Music Beaming Lines layer (Rules of Beaming) */}
-                  {isBeamed && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '7.5px', // Aligns perfectly to connect with lengthened vertical stems
-                      left: 0,
-                      right: 0,
-                      height: '10px',
-                      pointerEvents: 'none',
-                      zIndex: 2
-                    }}>
-                      {/* 1st Beam: Primary eighth note connection */}
+              const crossesBarBoundary = startSixteenths < 16 && accumulatedSixteenths >= 16;
+
+              return (
+                <React.Fragment key={idx}>
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: `${width}px`,
+                      height: '82px',
+                      borderRadius: 'var(--radius-md)',
+                      background: isCurrent
+                        ? 'rgba(6, 182, 212, 0.15)'
+                        : item.type === 'note'
+                          ? 'rgba(255, 255, 255, 0.02)'
+                          : 'rgba(255, 255, 255, 0.01)',
+                      border: isCurrent
+                        ? '2px solid var(--secondary)'
+                        : item.type === 'note'
+                          ? `1px solid ${color}40`
+                          : `1px dashed ${color}30`,
+                      boxShadow: isCurrent 
+                        ? '0 0 15px var(--secondary-glow)' 
+                        : 'none',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.4rem 0.3rem',
+                      cursor: isPlayMode ? 'default' : 'pointer',
+                      userSelect: 'none',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    className="rhythm-block"
+                    title={`${item.type === 'note' ? 'Note' : 'Rest'} (${label})`}
+                  >
+                    {/* Floating delete button appearing on 1s hover */}
+                    {!isPlayMode && (
+                      <button
+                        className="rhythm-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteRhythmItem(idx);
+                        }}
+                        title="Delete this block"
+                        style={{
+                          position: 'absolute',
+                          top: '-6px',
+                          right: '-6px',
+                          background: 'var(--accent-red)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '15px',
+                          height: '15px',
+                          fontSize: '0.55rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                          zIndex: 10,
+                          padding: 0,
+                          lineHeight: 1
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+
+                    {/* Horizontal Music Beaming Lines layer (Rules of Beaming) */}
+                    {isBeamed && (
                       <div style={{
                         position: 'absolute',
-                        top: 0,
-                        left: beamLeft ? 0 : '50%',
-                        right: beamRight ? 0 : '50%',
-                        height: '4px',
-                        background: isCurrent ? 'var(--secondary)' : color,
-                        boxShadow: isCurrent ? '0 0 4px var(--secondary-glow)' : 'none',
-                        borderRadius: '0.5px'
-                      }} />
-
-                      {/* 2nd Beam: Sixteenth note connection */}
-                      {item.duration === '1/16' && (
+                        top: '7.5px', // Aligns perfectly to connect with lengthened vertical stems
+                        left: 0,
+                        right: 0,
+                        height: '10px',
+                        pointerEvents: 'none',
+                        zIndex: 2
+                      }}>
+                        {/* 1st Beam: Primary eighth note connection */}
                         <div style={{
                           position: 'absolute',
-                          top: '6.5px',
-                          // If adjacent note is also 1/16, connect fully, otherwise render a neat 35% stub beam!
-                          left: (beamLeft && items[idx - 1]?.duration === '1/16') ? 0 : beamLeft ? '30%' : '50%',
-                          right: (beamRight && items[idx + 1]?.duration === '1/16') ? 0 : beamRight ? '30%' : '50%',
-                          height: '3px',
+                          top: 0,
+                          left: beamLeft ? 0 : '50%',
+                          right: beamRight ? 0 : '50%',
+                          height: '4px',
                           background: isCurrent ? 'var(--secondary)' : color,
+                          boxShadow: isCurrent ? '0 0 4px var(--secondary-glow)' : 'none',
                           borderRadius: '0.5px'
                         }} />
-                      )}
+
+                        {/* 2nd Beam: Sixteenth note connection */}
+                        {item.duration === '1/16' && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '6.5px',
+                            // If adjacent note is also 1/16, connect fully, otherwise render a neat 35% stub beam!
+                            left: (beamLeft && items[idx - 1]?.duration === '1/16') ? 0 : beamLeft ? '30%' : '50%',
+                            right: (beamRight && items[idx + 1]?.duration === '1/16') ? 0 : beamRight ? '30%' : '50%',
+                            height: '3px',
+                            background: isCurrent ? 'var(--secondary)' : color,
+                            borderRadius: '0.5px'
+                          }} />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Main Music Note Symbol Render */}
+                    <div style={{ 
+                      color: isCurrent ? 'var(--secondary)' : color, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      height: '24px',
+                      filter: isCurrent ? 'drop-shadow(0 0 4px var(--secondary-glow))' : 'none'
+                    }}>
+                      {renderRhythmIcon(item.type, item.duration, 22, isCurrent ? 'var(--secondary)' : color, isBeamed)}
+                    </div>
+
+                    {/* Labels details */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0px' }}>
+                      <span style={{ 
+                        fontSize: '0.55rem', 
+                        color: isCurrent ? 'var(--secondary)' : 'var(--text-dim)', 
+                        fontWeight: '700', 
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                        lineHeight: 1
+                      }}>
+                        {label}
+                      </span>
+                      <span style={{ 
+                        fontSize: '0.42rem', 
+                        color: 'rgba(255,255,255,0.18)', 
+                        fontWeight: '600',
+                        lineHeight: 1,
+                        marginTop: '1px'
+                      }}>
+                        {item.type === 'note' ? 'Note' : 'Rest'}
+                      </span>
+                    </div>
+
+                    {/* Dot and Tie toggle action row */}
+                    {!isPlayMode && (
+                      <div style={{ display: 'flex', gap: '4px', zIndex: 5, width: '100%', justifyContent: 'center' }}>
+                        {item.duration !== '1/16' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDotted(idx);
+                            }}
+                            style={{
+                              background: isDotted ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255,255,255,0.01)',
+                              border: isDotted ? '1px solid var(--accent-purple)' : '1px solid rgba(255,255,255,0.04)',
+                              borderRadius: '2px',
+                              color: isDotted ? 'var(--accent-purple)' : 'var(--text-muted)',
+                              padding: '1px 3px',
+                              fontSize: '0.52rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              lineHeight: 1
+                            }}
+                            title={isDotted ? "Remove Dot" : "Add Dot (50% longer)"}
+                          >
+                            Dot
+                          </button>
+                        )}
+                        {item.type === 'note' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTied(idx);
+                            }}
+                            style={{
+                              background: item.tied ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.01)',
+                              border: item.tied ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.04)',
+                              borderRadius: '2px',
+                              color: item.tied ? '#10b981' : 'var(--text-muted)',
+                              padding: '1px 3px',
+                              fontSize: '0.52rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              lineHeight: 1
+                            }}
+                            title={item.tied ? "Break Tie" : "Tie to Next Note"}
+                          >
+                            Tie
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Curved Tie visual indicator */}
+                    {item.tied && item.type === 'note' && (
+                      <div style={{
+                        position: 'absolute',
+                        right: '-14px',
+                        bottom: '4px',
+                        width: '24px',
+                        height: '10px',
+                        borderBottom: '2px solid #10b981',
+                        borderRadius: '0 0 50% 50%',
+                        pointerEvents: 'none',
+                        zIndex: 10,
+                        opacity: 0.85
+                      }} />
+                    )}
+                  </div>
+
+                  {/* Vertical Dual-Line Measure Divider */}
+                  {crossesBarBoundary && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      height: '82px',
+                      padding: '0 0.5rem',
+                      flexShrink: 0,
+                      userSelect: 'none',
+                      pointerEvents: 'none'
+                    }}>
+                      <div style={{ width: '2px', height: '100%', background: 'rgba(255,255,255,0.15)', borderRadius: '1px' }} />
+                      <span style={{ fontSize: '0.58rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', writingMode: 'vertical-lr', letterSpacing: '1px', opacity: 0.7 }}>BAR 1 | BAR 2</span>
+                      <div style={{ width: '2px', height: '100%', background: 'rgba(255,255,255,0.15)', borderRadius: '1px' }} />
                     </div>
                   )}
-
-                  {/* Main Music Note Symbol Render */}
-                  <div style={{ 
-                    color: isCurrent ? 'var(--secondary)' : color, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    height: '26px',
-                    filter: isCurrent ? 'drop-shadow(0 0 4px var(--secondary-glow))' : 'none'
-                  }}>
-                    {renderRhythmIcon(item.type, item.duration, 24, isCurrent ? 'var(--secondary)' : color, isBeamed)}
-                  </div>
-
-                  {/* Labels details */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                    <span style={{ 
-                      fontSize: '0.55rem', 
-                      color: isCurrent ? 'var(--secondary)' : 'var(--text-dim)', 
-                      fontWeight: '700', 
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.02em',
-                      lineHeight: 1
-                    }}>
-                      {label}
-                    </span>
-                    <span style={{ 
-                      fontSize: '0.45rem', 
-                      color: 'rgba(255,255,255,0.2)', 
-                      fontWeight: '600',
-                      lineHeight: 1
-                    }}>
-                      {item.type === 'note' ? 'Note' : 'Rest'}
-                    </span>
-                  </div>
-                </div>
+                </React.Fragment>
               );
-            })
-          )}
+            });
+          })()}
         </div>
       </div>
 

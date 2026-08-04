@@ -132,6 +132,77 @@ export default function App() {
     fetchFolders();
   }, []);
 
+  // Real-time synchronization using Server-Sent Events (SSE)
+  useEffect(() => {
+    let updatesUrl = `${API_BASE}/updates`;
+    if (updatesUrl.startsWith('/')) {
+      updatesUrl = `${window.location.origin}${updatesUrl}`;
+    }
+    
+    console.log('🔌 Connecting to real-time update stream:', updatesUrl);
+    const eventSource = new EventSource(updatesUrl);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.status === 'connected') return;
+        
+        console.log('🔔 Received real-time update event:', data);
+        
+        // Handle global restore
+        if (data.type === 'restore') {
+          fetchFolders();
+          fetchSongs();
+          if (selectedSongId) {
+            fetchSongDetails(selectedSongId);
+          }
+          return;
+        }
+
+        // Handle folder events
+        if (data.type?.startsWith('folder_')) {
+          fetchFolders();
+          return;
+        }
+
+        // Handle song events
+        if (data.type?.startsWith('song_')) {
+          fetchSongs();
+          if (selectedSongId && (data.song?.id === selectedSongId || data.id === selectedSongId)) {
+            fetchSongDetails(selectedSongId);
+          }
+          return;
+        }
+
+        // Handle part events
+        if (data.type?.startsWith('part_')) {
+          if (selectedSongId && (data.song_id === selectedSongId || data.part?.song_id === selectedSongId)) {
+            fetchSongDetails(selectedSongId);
+          }
+          return;
+        }
+
+        // Handle widget events
+        if (data.type?.startsWith('widget_')) {
+          if (selectedSongId) {
+            fetchSongDetails(selectedSongId);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE event payload:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.warn('⚠️ Real-time sync connection lost. Attempting reconnect...', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [API_BASE, selectedSongId]);
+
   const fetchFolders = async () => {
     try {
       const res = await fetch(`${API_BASE}/folders`);
@@ -144,13 +215,23 @@ export default function App() {
     }
   };
 
-  // Load full details whenever selection changes
+  // Load full details whenever selection changes & sync with browser address bar
   useEffect(() => {
     if (selectedSongId) {
       fetchSongDetails(selectedSongId);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('songId') !== selectedSongId) {
+        url.searchParams.set('songId', selectedSongId);
+        window.history.pushState({}, '', url.toString());
+      }
     } else {
       setSelectedSong(null);
       setActivePartId(null);
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('songId')) {
+        url.searchParams.delete('songId');
+        window.history.pushState({}, '', url.toString());
+      }
     }
   }, [selectedSongId]);
 
@@ -160,8 +241,14 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSongs(data);
-        // Default select first song if available and nothing is selected
-        if (data.length > 0 && !selectedSongId) {
+        
+        // Read deep-link parameter from URL query string
+        const params = new URLSearchParams(window.location.search);
+        const urlSongId = params.get('songId');
+
+        if (urlSongId && data.some((s: any) => s.id === urlSongId)) {
+          setSelectedSongId(urlSongId);
+        } else if (data.length > 0 && !selectedSongId) {
           setSelectedSongId(data[0].id);
         }
       }
@@ -470,6 +557,58 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error deleting widget:', err);
+    }
+  };
+
+  const handleMoveWidget = async (widgetId: string, direction: 'up' | 'down') => {
+    if (!selectedSong || !selectedSongId || !activePartId) return;
+    const activePart = selectedSong.parts.find(p => p.id === activePartId);
+    if (!activePart) return;
+
+    const widgets = [...activePart.widgets];
+    const idx = widgets.findIndex(w => w.id === widgetId);
+    if (idx === -1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= widgets.length) return;
+
+    // Swap the elements in the local array copy
+    const temp = widgets[idx];
+    widgets[idx] = widgets[targetIdx];
+    widgets[targetIdx] = temp;
+
+    // Assign new sequential order indices based on their new array positions
+    const updatedWidgets = widgets.map((w, index) => ({
+      ...w,
+      order_index: index
+    }));
+
+    // Update frontend state first for instant feedback (optimistic UI)
+    const updatedParts = selectedSong.parts.map(part => {
+      if (part.id === activePartId) {
+        return { ...part, widgets: updatedWidgets };
+      }
+      return part;
+    });
+    setSelectedSong({ ...selectedSong, parts: updatedParts });
+
+    // Sync with backend asynchronously
+    try {
+      await Promise.all([
+        fetch(`${API_BASE}/widgets/${updatedWidgets[idx].id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_index: idx })
+        }),
+        fetch(`${API_BASE}/widgets/${updatedWidgets[targetIdx].id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_index: targetIdx })
+        })
+      ]);
+    } catch (err) {
+      console.error('Error reordering widgets:', err);
+      // Fallback: reload details from server if backend fails
     }
   };
 
@@ -999,14 +1138,12 @@ export default function App() {
                             <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>This part has no widgets yet. Let's add standard lesson tools below!</p>
                           </div>
                         ) : (
-                          currentPart.widgets.map((widget) => {
+                          currentPart.widgets.map((widget, widgetIdx) => {
                             const meta = getWidgetTypeLabel(widget.widget_type);
-                            const widgetTitle = (widget.widget_type === 'fret_board' && widget.data?.title) 
-                              ? widget.data.title 
-                              : meta.name;
+                            const widgetTitle = widget.data?.title || meta.name;
                             const isEditingTitle = editingWidgetTitleId === widget.id;
                             return (
-                              <div key={widget.id} className="glass-card widget-card">
+                              <div key={widget.id} id={`widget-${widget.id}`} className="glass-card widget-card">
                                 <div className="widget-header">
                                   {isEditingTitle ? (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1 }}>
@@ -1042,22 +1179,38 @@ export default function App() {
                                     <span className="widget-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                       {meta.icon}
                                       {widgetTitle}
-                                      {widget.widget_type === 'fret_board' && (
-                                        <button 
-                                          className="btn btn-secondary btn-icon"
-                                          style={{ width: '22px', height: '22px', padding: 0, opacity: 0.6, border: 'none', background: 'transparent' }}
-                                          title="Rename Fret Board"
-                                          onClick={() => {
-                                            setEditingWidgetTitleId(widget.id);
-                                            setEditingWidgetTitleValue(widget.data?.title || '');
-                                          }}
-                                        >
-                                          <Edit3 size={11} style={{ color: 'var(--primary)' }} />
-                                        </button>
-                                      )}
+                                      <button 
+                                        className="btn btn-secondary btn-icon"
+                                        style={{ width: '22px', height: '22px', padding: 0, opacity: 0.6, border: 'none', background: 'transparent' }}
+                                        title={`Rename ${meta.name}`}
+                                        onClick={() => {
+                                          setEditingWidgetTitleId(widget.id);
+                                          setEditingWidgetTitleValue(widget.data?.title || '');
+                                        }}
+                                      >
+                                        <Edit3 size={11} style={{ color: 'var(--primary)' }} />
+                                      </button>
                                     </span>
                                   )}
-                                  <div className="widget-actions">
+                                  <div className="widget-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <button 
+                                      className="btn btn-secondary btn-icon" 
+                                      style={{ width: '28px', height: '28px', opacity: widgetIdx === 0 ? 0.3 : 0.8 }} 
+                                      disabled={widgetIdx === 0}
+                                      onClick={() => handleMoveWidget(widget.id, 'up')}
+                                      title="Move Widget Up"
+                                    >
+                                      <ChevronUp size={13} style={{ color: 'var(--text-main)' }} />
+                                    </button>
+                                    <button 
+                                      className="btn btn-secondary btn-icon" 
+                                      style={{ width: '28px', height: '28px', opacity: widgetIdx === currentPart.widgets.length - 1 ? 0.3 : 0.8 }} 
+                                      disabled={widgetIdx === currentPart.widgets.length - 1}
+                                      onClick={() => handleMoveWidget(widget.id, 'down')}
+                                      title="Move Widget Down"
+                                    >
+                                      <ChevronDown size={13} style={{ color: 'var(--text-main)' }} />
+                                    </button>
                                     <button className="btn btn-secondary btn-icon" style={{ width: '28px', height: '28px' }} onClick={() => handleDeleteWidget(widget.id)}>
                                       <Trash2 size={13} style={{ color: 'var(--accent-red)' }} />
                                     </button>
@@ -1088,6 +1241,7 @@ export default function App() {
                                     widgetId={widget.id}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    allWidgets={currentPart.widgets}
                                   />
                                 )}
 
@@ -1097,6 +1251,7 @@ export default function App() {
                                     songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
+                                    allWidgets={currentPart.widgets}
                                   />
                                 )}
                               </div>
@@ -1234,7 +1389,7 @@ export default function App() {
                           {/* Matching Widgets continuous list */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {matchingWidgets.map(widget => (
-                              <div key={widget.id} className="play-widget-wrapper">
+                              <div key={widget.id} id={`widget-${widget.id}`} className="play-widget-wrapper">
                                 {widget.widget_type === 'fret_board' && (
                                   <FretBoardWidget 
                                     widgetId={widget.id}
@@ -1260,6 +1415,7 @@ export default function App() {
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
                                     isPlayMode={true}
+                                    allWidgets={matchingWidgets}
                                   />
                                 )}
 
@@ -1270,6 +1426,7 @@ export default function App() {
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
                                     isPlayMode={true}
+                                    allWidgets={matchingWidgets}
                                   />
                                 )}
                               </div>
