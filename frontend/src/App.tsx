@@ -68,7 +68,10 @@ const PART_TYPES = [
 
 export default function App() {
   const [songs, setSongs] = useState<Song[]>([]);
-  const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
+  const [selectedSongId, setSelectedSongId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('songId');
+  });
   const [selectedSong, setSelectedSong] = useState<SongDetails | null>(null);
   const [activePartId, setActivePartId] = useState<string | null>(null);
   const [collapsedParts, setCollapsedParts] = useState<Record<string, boolean>>({});
@@ -248,8 +251,12 @@ export default function App() {
 
         if (urlSongId && data.some((s: any) => s.id === urlSongId)) {
           setSelectedSongId(urlSongId);
-        } else if (data.length > 0 && !selectedSongId) {
-          setSelectedSongId(data[0].id);
+        } else if (data.length > 0) {
+          if (!selectedSongId || !data.some((s: any) => s.id === selectedSongId)) {
+            setSelectedSongId(data[0].id);
+          }
+        } else {
+          setSelectedSongId(null);
         }
       }
     } catch (err) {
