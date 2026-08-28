@@ -1229,6 +1229,7 @@ export default function App() {
                                   <FretBoardWidget 
                                     widgetId={widget.id}
                                     tuning={selectedSong.tuning}
+                                    songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
                                     allWidgets={currentPart.widgets}
@@ -1402,6 +1403,7 @@ export default function App() {
                                   <FretBoardWidget 
                                     widgetId={widget.id}
                                     tuning={selectedSong.tuning}
+                                    songKey={selectedSong?.key_signature ? selectedSong.key_signature.split(' ')[0] : 'C'}
                                     initialData={widget.data || {}}
                                     onSave={(data) => handleSaveWidgetData(widget.id, data)}
                                     isPlayMode={true}

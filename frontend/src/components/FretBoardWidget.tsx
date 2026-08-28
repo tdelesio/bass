@@ -12,12 +12,14 @@ interface FretNote {
 interface FretBoardWidgetProps {
   widgetId: string;
   tuning: string;
+  songKey?: string;
   initialData: {
     notes?: FretNote[];
     title?: string;
     linkedRhythmId?: string;
+    selectedScaleMode?: string;
   };
-  onSave: (data: { notes: FretNote[]; title?: string; linkedRhythmId?: string }) => void;
+  onSave: (data: { notes: FretNote[]; title?: string; linkedRhythmId?: string; selectedScaleMode?: string }) => void;
   isPlayMode?: boolean;
   allWidgets?: any[];
 }
@@ -68,10 +70,11 @@ const calculateFrequency = (baseMidi: number, fret: number): number => {
   return 440 * Math.pow(2, (midi - 69) / 12);
 };
 
-export default function FretBoardWidget({ widgetId, tuning, initialData, onSave, isPlayMode, allWidgets = [] }: FretBoardWidgetProps) {
+export default function FretBoardWidget({ widgetId, tuning, songKey = 'C', initialData, onSave, isPlayMode, allWidgets = [] }: FretBoardWidgetProps) {
   const [notes, setNotes] = useState<FretNote[]>(initialData.notes || []);
   const [customTitle, setCustomTitle] = useState<string>(initialData.title || '');
   const [linkedRhythmId, setLinkedRhythmId] = useState<string | undefined>(initialData.linkedRhythmId);
+  const [selectedScaleMode, setSelectedScaleMode] = useState<string | null>(initialData.selectedScaleMode || null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState<number | null>(null);
   const [playbackBpm, setPlaybackBpm] = useState(100);
@@ -79,6 +82,66 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
 
   const playbackTimerRef = useRef<any | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Music Theory Data structures
+  const NOTE_MAP: Record<string, string> = {
+    "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"
+  };
+
+  const getChromaticIndex = (noteName: string): number => {
+    const normalized = noteName.trim();
+    const mapped = NOTE_MAP[normalized] || normalized;
+    const idx = CHROMATIC_SCALE.indexOf(mapped);
+    return idx === -1 ? 0 : idx;
+  };
+
+  const formatNoteName = (note: string): string => {
+    const flatMap: Record<string, string> = {
+      "C#": "C#/D♭",
+      "D#": "D#/E♭",
+      "F#": "F#/G♭",
+      "G#": "G#/A♭",
+      "A#": "A#/B♭"
+    };
+    return flatMap[note] || note;
+  };
+
+  const MODES = [
+    { degree: 1, name: "Ionian (Major)", offset: 0 },
+    { degree: 2, name: "Dorian", offset: 2 },
+    { degree: 3, name: "Phrygian", offset: 4 },
+    { degree: 4, name: "Lydian", offset: 5 },
+    { degree: 5, name: "Mixolydian", offset: 7 },
+    { degree: 6, name: "Aeolian (Natural Minor)", offset: 9 },
+    { degree: 7, name: "Locrian", offset: 11 }
+  ];
+
+  const songRoot = songKey || 'C';
+  const rootIdx = getChromaticIndex(songRoot);
+  
+  const modesWithNotes = MODES.map(m => {
+    const noteIdx = (rootIdx + m.offset) % 12;
+    const noteName = CHROMATIC_SCALE[noteIdx];
+    const displayNoteName = displayNoteNameForValue(noteName);
+    return {
+      ...m,
+      noteName,
+      displayNoteName
+    };
+  });
+
+  function displayNoteNameForValue(note: string): string {
+    const flatMap: Record<string, string> = {
+      "C#": "C#/D♭",
+      "D#": "D#/E♭",
+      "F#": "F#/G♭",
+      "G#": "G#/A♭",
+      "A#": "A#/B♭"
+    };
+    return flatMap[note] || note;
+  }
+
+  const allowedNoteNames = modesWithNotes.map(m => m.noteName);
 
   // Get string notes based on selected tuning
   const stringBases = getTuningBaseMidiNotes(tuning);
@@ -96,6 +159,9 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
     if (initialData.linkedRhythmId !== undefined) {
       setLinkedRhythmId(initialData.linkedRhythmId);
     }
+    if (initialData.selectedScaleMode !== undefined) {
+      setSelectedScaleMode(initialData.selectedScaleMode || null);
+    }
   }, [initialData]);
 
   // Clean up playback on unmount
@@ -105,19 +171,40 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
     };
   }, []);
 
-  const saveChanges = (updatedNotes: FretNote[]) => {
+  const saveChanges = (updatedNotes: FretNote[], scaleMode: string | null = selectedScaleMode) => {
     setNotes(updatedNotes);
-    onSave({ notes: updatedNotes, title: customTitle, linkedRhythmId });
+    onSave({ 
+      notes: updatedNotes, 
+      title: customTitle, 
+      linkedRhythmId, 
+      selectedScaleMode: scaleMode || undefined 
+    });
   };
 
   const handleTitleChange = (newTitle: string) => {
     setCustomTitle(newTitle);
-    onSave({ notes, title: newTitle, linkedRhythmId });
+    onSave({ 
+      notes, 
+      title: newTitle, 
+      linkedRhythmId, 
+      selectedScaleMode: selectedScaleMode || undefined 
+    });
   };
 
   const handleLinkRhythm = (targetId: string | undefined) => {
     setLinkedRhythmId(targetId);
-    onSave({ notes, title: customTitle, linkedRhythmId: targetId });
+    onSave({ 
+      notes, 
+      title: customTitle, 
+      linkedRhythmId: targetId, 
+      selectedScaleMode: selectedScaleMode || undefined 
+    });
+  };
+
+  const handleScaleChange = (scaleMode: string) => {
+    const val = scaleMode === '' ? null : scaleMode;
+    setSelectedScaleMode(val);
+    saveChanges(notes, val);
   };
 
   // Synthesizes a realistic warm bass tone using Triangle wave + Gain ramp-down + Lowpass filter
@@ -189,6 +276,21 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
   // Handles deleting a specific note by its ID and resequencing remaining notes sequentially
   const handleDeleteNoteById = (noteId: string) => {
     const filtered = notes.filter(n => n.id !== noteId);
+    
+    // Sort remaining notes by their previous sequence, and reassign sequential numbers (1, 2, 3...)
+    const resequenced = [...filtered]
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((n, idx) => ({
+        ...n,
+        sequence: idx + 1
+      }));
+
+    saveChanges(resequenced);
+  };
+
+  // Handles deleting all notes at a specific string/fret cell
+  const handleDeleteNotesAtCell = (stringIdx: number, fretIndex: number) => {
+    const filtered = notes.filter(n => !(n.string === stringIdx && n.fret === fretIndex));
     
     // Sort remaining notes by their previous sequence, and reassign sequential numbers (1, 2, 3...)
     const resequenced = [...filtered]
@@ -488,6 +590,33 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
             )}
           </div>
 
+          {/* Scale Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Scale Mode:</span>
+            <select
+              value={selectedScaleMode || ''}
+              onChange={(e) => handleScaleChange(e.target.value)}
+              style={{
+                background: 'rgba(30, 41, 59, 0.7)',
+                border: selectedScaleMode ? '1px solid var(--secondary)' : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 'var(--radius-sm)',
+                color: selectedScaleMode ? 'var(--secondary)' : 'var(--text-main)',
+                fontSize: '0.8rem',
+                padding: '0.25rem 0.5rem',
+                cursor: 'pointer',
+                outline: 'none',
+                boxShadow: selectedScaleMode ? '0 0 10px rgba(16, 185, 129, 0.15)' : 'none'
+              }}
+            >
+              <option value="">(None)</option>
+              {modesWithNotes.map(m => (
+                <option key={m.degree} value={m.degree.toString()}>
+                  {m.degree} - {m.name} ({m.displayNoteName})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {!isPlayMode && (
             <button className="btn btn-secondary btn-icon" onClick={clearFretboard} title="Clear Fretboard">
               <Trash2 size={16} />
@@ -610,20 +739,51 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
                       const isPlayingNote = hasNotes && currentPlayIndex !== null && matchingNotes.some(n => n.sequence === currentPlayIndex + 1);
                       const firstMatchingNote = matchingNotes[0];
 
+                      const baseMidi = stringBases[stringNum - 1];
+                      const cellNoteName = calculateNoteName(baseMidi, fretIdx);
+
+                      const isScaleActive = !!selectedScaleMode;
+                      const isAllowedInScale = isScaleActive && allowedNoteNames.includes(cellNoteName);
+                      const selectedModeObj = isScaleActive ? modesWithNotes.find(m => m.degree.toString() === selectedScaleMode) : null;
+                      const isScaleRoot = selectedModeObj && selectedModeObj.noteName === cellNoteName;
+
+                      const isCellDisabled = isScaleActive && !isAllowedInScale;
+
+                      // Calculate scale degree relative to selected modal root (1-7)
+                      let modalDegree = 0;
+                      if (isScaleActive && isAllowedInScale) {
+                        const cellModeObj = modesWithNotes.find(m => m.noteName === cellNoteName);
+                        if (cellModeObj && selectedScaleMode) {
+                          const parentDegree = cellModeObj.degree;
+                          const startDegree = parseInt(selectedScaleMode);
+                          modalDegree = ((parentDegree - startDegree + 7) % 7) + 1;
+                        }
+                      }
+
+                      // Check if it is an avoidance note (6 on Dorian, 4 on Mixolydian, 4 on Ionian)
+                      const isAvoidanceNote = isScaleActive && (
+                        (selectedScaleMode === "1" && modalDegree === 4) || // Ionian 4
+                        (selectedScaleMode === "5" && modalDegree === 4) || // Mixolydian 4
+                        (selectedScaleMode === "2" && modalDegree === 6)    // Dorian 6
+                      );
+
                       return (
                         <div
                           key={fretIdx}
-                          onClick={() => handleFretClick(stringNum, fretIdx)}
+                          onClick={() => !isCellDisabled && handleFretClick(stringNum, fretIdx)}
                           className="fret-cell"
                           style={{
                             width: '60px',
                             height: '44px',
                             position: 'relative',
-                            cursor: 'pointer',
+                            cursor: isCellDisabled ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            borderRight: '1.5px solid #4a5568'
+                            borderRight: '1.5px solid #4a5568',
+                            opacity: isCellDisabled ? 0.18 : 1,
+                            transition: 'opacity 0.2s ease',
+                            pointerEvents: isCellDisabled ? 'none' : 'auto'
                           }}
                         >
                           {/* Inner wood highlight on hover */}
@@ -635,19 +795,96 @@ export default function FretBoardWidget({ widgetId, tuning, initialData, onSave,
                             transition: 'opacity 0.15s'
                           }} />
 
+                          {/* Scale Guide Backdrop Circle */}
+                          {isScaleActive && isAllowedInScale && !hasNotes && (
+                            <div 
+                              title={`${formatNoteName(cellNoteName)} (Modal Degree ${modalDegree}${isAvoidanceNote ? ' - Avoidance Note' : ''})`}
+                              style={{
+                                position: 'absolute',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                border: modalDegree === 1 
+                                  ? '2px solid rgba(245, 158, 11, 0.85)' // Solid gold/orange ring for root
+                                  : isAvoidanceNote
+                                    ? '2px dashed rgba(239, 68, 68, 0.85)' // Dashed red ring for avoidance notes
+                                    : '2px dashed rgba(16, 185, 129, 0.65)', // Dashed green ring for other degrees
+                                background: modalDegree === 1
+                                  ? 'rgba(245, 158, 11, 0.15)'
+                                  : isAvoidanceNote
+                                    ? 'rgba(239, 68, 68, 0.12)'
+                                    : 'rgba(16, 185, 129, 0.06)',
+                                boxShadow: modalDegree === 1
+                                  ? '0 0 12px rgba(245, 158, 11, 0.45)'
+                                  : isAvoidanceNote
+                                    ? '0 0 12px rgba(239, 68, 68, 0.4)'
+                                    : '0 0 6px rgba(16, 185, 129, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 5,
+                                pointerEvents: 'none',
+                                fontFamily: 'Outfit'
+                              }}
+                            >
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: (modalDegree === 1 || isAvoidanceNote) ? 800 : 600,
+                                color: modalDegree === 1 
+                                  ? '#f59e0b' 
+                                  : isAvoidanceNote 
+                                    ? '#ef4444' 
+                                    : '#10b981',
+                              }}>
+                                {formatNoteName(cellNoteName)}
+                              </span>
+                              <span style={{
+                                position: 'absolute',
+                                bottom: '-13px',
+                                fontSize: '0.52rem',
+                                fontWeight: 900,
+                                color: modalDegree === 1 
+                                  ? '#f59e0b' 
+                                  : isAvoidanceNote 
+                                    ? '#ef4444' 
+                                    : '#10b981',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                              }}>
+                                {modalDegree}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Render Note badge if active */}
                           {hasNotes && (
-                            <div className={`fret-note-badge ${isPlayingNote ? 'pulse-active' : ''}`} style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              background: isPlayingNote 
-                                ? 'var(--secondary)' 
-                                : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
-                              border: `2px solid ${isPlayingNote ? '#fff' : 'rgba(255,255,255,0.7)'}`,
-                              boxShadow: isPlayingNote 
-                                ? '0 0 15px var(--secondary)' 
-                                : '0 4px 10px rgba(0,0,0,0.5), 0 0 8px var(--primary-glow)',
+                            <div 
+                              title={`${firstMatchingNote.noteName} (Modal Degree ${modalDegree}${isAvoidanceNote ? ' - Avoidance Note' : ''}) - Double click to delete`}
+                              className={`fret-note-badge ${isPlayingNote ? 'pulse-active' : ''}`} 
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                if (isPlayMode) return;
+                                handleDeleteNotesAtCell(stringNum, fretIdx);
+                              }}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                background: isPlayingNote 
+                                  ? 'var(--secondary)' 
+                                  : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                                border: isScaleActive && isScaleRoot
+                                  ? '2px solid #f59e0b' // Gold border for scale root
+                                  : isScaleActive && isAvoidanceNote
+                                    ? '2px solid #ef4444' // Red border for active avoidance notes
+                                    : `2px solid ${isPlayingNote ? '#fff' : 'rgba(255,255,255,0.7)'}`,
+                                boxShadow: isPlayingNote 
+                                  ? '0 0 15px var(--secondary)' 
+                                  : isScaleActive && isScaleRoot
+                                    ? '0 4px 10px rgba(0,0,0,0.5), 0 0 12px rgba(245, 158, 11, 0.6)'
+                                    : isScaleActive && isAvoidanceNote
+                                      ? '0 4px 10px rgba(0,0,0,0.5), 0 0 12px rgba(239, 68, 68, 0.5)'
+                                      : '0 4px 10px rgba(0,0,0,0.5), 0 0 8px var(--primary-glow)',
                               color: 'white',
                               display: 'flex',
                               flexDirection: 'column',
