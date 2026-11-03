@@ -1375,7 +1375,7 @@ app.post('/api/restore', async (req: Request, res: Response) => {
         [
           widget.id,
           widget.resolvedSongId,
-          widget.validPartId,
+          null,
           widget.widget_type,
           normalizedOrderIndex,
           widgetData,
