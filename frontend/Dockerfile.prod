@@ -23,6 +23,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Custom Nginx configuration to support SPA routing (Vite/React) and /api reverse proxying
 RUN echo 'server { \
     listen 80; \
+    client_max_body_size 50M; \
     location / { \
         root /usr/share/nginx/html; \
         index index.html index.htm; \

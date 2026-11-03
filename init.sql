@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS songs (
     artist VARCHAR(255) NOT NULL,
     tuning VARCHAR(100) DEFAULT 'Standard (EADG)' NOT NULL,
     key_signature VARCHAR(100) DEFAULT 'C Major' NOT NULL,
+    tempo INT DEFAULT 120 NOT NULL,
+    time_signature VARCHAR(20) DEFAULT '4/4' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -26,15 +28,20 @@ CREATE TABLE IF NOT EXISTS song_parts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
     part_type part_type_enum NOT NULL,
+    label VARCHAR(255),
     order_index INT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_song_part UNIQUE (song_id, part_type, order_index)
+    bars INT DEFAULT 4 NOT NULL,
+    lyrics TEXT DEFAULT '' NOT NULL,
+    notes TEXT DEFAULT '' NOT NULL,
+    linked_widget_ids JSONB DEFAULT '[]'::jsonb NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Widgets table
+-- Widgets table (belongs to song in Teach Mode, linked into song_parts in Edit Mode)
 CREATE TABLE IF NOT EXISTS widgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    part_id UUID NOT NULL REFERENCES song_parts(id) ON DELETE CASCADE,
+    song_id UUID REFERENCES songs(id) ON DELETE CASCADE,
+    part_id UUID REFERENCES song_parts(id) ON DELETE SET NULL,
     widget_type widget_type_enum NOT NULL,
     order_index INT NOT NULL,
     data JSONB NOT NULL,
@@ -43,39 +50,63 @@ CREATE TABLE IF NOT EXISTS widgets (
 );
 
 -- Indexing for performance and JSONB queries
+CREATE INDEX IF NOT EXISTS idx_widgets_song_id ON widgets(song_id);
 CREATE INDEX IF NOT EXISTS idx_widgets_part_id ON widgets(part_id);
 CREATE INDEX IF NOT EXISTS idx_song_parts_song_id ON song_parts(song_id);
 
 -- Insert Seed Data (Pink Floyd - Money, Key of B Minor, Standard Tuning)
-INSERT INTO songs (id, title, artist, tuning, key_signature) VALUES
-('a0000000-0000-0000-0000-000000000001', 'Money', 'Pink Floyd', 'Standard (EADG)', 'B Minor'),
-('a0000000-0000-0000-0000-000000000002', 'Under the Bridge', 'Red Hot Chili Peppers', 'Standard (EADG)', 'E Major'),
-('a0000000-0000-0000-0000-000000000003', 'Hysteria', 'Muse', 'Standard (EADG)', 'A Minor')
+INSERT INTO songs (id, title, artist, tuning, key_signature, tempo, time_signature) VALUES
+('a0000000-0000-0000-0000-000000000001', 'Money', 'Pink Floyd', 'Standard (EADG)', 'B Minor', 120, '7/4'),
+('a0000000-0000-0000-0000-000000000002', 'Under the Bridge', 'Red Hot Chili Peppers', 'Standard (EADG)', 'E Major', 84, '4/4'),
+('a0000000-0000-0000-0000-000000000003', 'Hysteria', 'Muse', 'Standard (EADG)', 'A Minor', 93, '4/4')
 ON CONFLICT (id) DO NOTHING;
 
 -- Parts for Money (Pink Floyd)
-INSERT INTO song_parts (id, song_id, part_type, order_index) VALUES
-('b0000000-0000-0000-0000-000000000011', 'a0000000-0000-0000-0000-000000000001', 'Intro', 0),
-('b0000000-0000-0000-0000-000000000012', 'a0000000-0000-0000-0000-000000000001', 'Verse', 1)
+INSERT INTO song_parts (id, song_id, part_type, label, order_index, bars, lyrics, notes, linked_widget_ids) VALUES
+(
+    'b0000000-0000-0000-0000-000000000011',
+    'a0000000-0000-0000-0000-000000000001',
+    'Intro',
+    'Intro Riff',
+    0,
+    8,
+    '(7/4 Bass Riff Instrumental)',
+    'Lock in with the cash register loop and kick drum.',
+    '["c0000000-0000-0000-0000-000000000111", "c0000000-0000-0000-0000-000000000112", "c0000000-0000-0000-0000-000000000113", "c0000000-0000-0000-0000-000000000114"]'::jsonb
+),
+(
+    'b0000000-0000-0000-0000-000000000012',
+    'a0000000-0000-0000-0000-000000000001',
+    'Verse',
+    'Verse 1',
+    1,
+    12,
+    'Money, get away\nGet a good job with more pay and you''re okay\nMoney, it''s a gas\nGrab that cash with both hands and make a stash',
+    'Keep the main 7/4 ostinato rolling underneath the vocals.',
+    '["c0000000-0000-0000-0000-000000000112", "c0000000-0000-0000-0000-000000000114"]'::jsonb
+)
 ON CONFLICT (id) DO NOTHING;
 
--- Widgets for Intro of Money (Fret board with 7/4 sequence, Notes, Rhythm)
-INSERT INTO widgets (id, part_id, widget_type, order_index, data) VALUES
+-- Widgets for Money (stored at song level for Teach Mode, linked into parts for Edit/Play Mode)
+INSERT INTO widgets (id, song_id, part_id, widget_type, order_index, data) VALUES
 -- 1. Note Widget describing the Money bassline
 (
     'c0000000-0000-0000-0000-000000000111',
-    'b0000000-0000-0000-0000-000000000011',
+    'a0000000-0000-0000-0000-000000000001',
+    NULL,
     'note',
     0,
-    '{"text": "### Money Bassline Intro (Pink Floyd)\nThis legendary riff is in **7/4 time**. Feel the syncopation and focus on playing each note with a nice, punchy round tone.\n\n*   **Tempo**: 120 BPM\n*   **Key**: B Minor\n*   **Groove style**: Steady, staccato picking."}'
+    '{"title": "Money 7/4 Groove Notes", "text": "### Money Bassline Intro (Pink Floyd)\nThis legendary riff is in **7/4 time**. Feel the syncopation and focus on playing each note with a nice, punchy round tone.\n\n*   **Tempo**: 120 BPM\n*   **Key**: B Minor\n*   **Groove style**: Steady, staccato picking."}'
 ),
 -- 2. Fret Board Widget showing the notes
 (
     'c0000000-0000-0000-0000-000000000112',
-    'b0000000-0000-0000-0000-000000000011',
+    'a0000000-0000-0000-0000-000000000001',
+    NULL,
     'fret_board',
     1,
     '{
+        "title": "Main 7/4 Bass Riff",
         "notes": [
             {"id": "n1", "string": 3, "fret": 2, "sequence": 1, "noteName": "B"},
             {"id": "n2", "string": 1, "fret": 4, "sequence": 2, "noteName": "F#"},
@@ -91,10 +122,12 @@ INSERT INTO widgets (id, part_id, widget_type, order_index, data) VALUES
 -- 3. Rhythm Widget for 7/4 beat
 (
     'c0000000-0000-0000-0000-000000000113',
-    'b0000000-0000-0000-0000-000000000011',
+    'a0000000-0000-0000-0000-000000000001',
+    NULL,
     'rhythm',
     2,
     '{
+        "title": "7/4 Pulse Pattern",
         "timeSignature": "7/4",
         "tempo": 120,
         "subdivisions": 4,
@@ -104,10 +137,12 @@ INSERT INTO widgets (id, part_id, widget_type, order_index, data) VALUES
 -- 4. Roman Numeral Widget showing the progression
 (
     'c0000000-0000-0000-0000-000000000114',
-    'b0000000-0000-0000-0000-000000000011',
+    'a0000000-0000-0000-0000-000000000001',
+    NULL,
     'roman_numeral',
     3,
     '{
+        "title": "Verse Turnaround Chords",
         "key": "B",
         "scale": "minor",
         "progression": ["i", "v", "iv", "i"]
