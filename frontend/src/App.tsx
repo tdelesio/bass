@@ -39,6 +39,7 @@ import FretBoardWidget from './components/FretBoardWidget';
 import NoteWidget from './components/NoteWidget';
 import RhythmWidget from './components/RhythmWidget';
 import RomanNumeralWidget from './components/RomanNumeralWidget';
+import HelixToneWidget from './components/HelixToneWidget';
 
 // Interfaces matching our PostgreSQL Backend API (v1.2 - 3-Mode Architecture)
 export interface Folder {
@@ -61,7 +62,7 @@ export interface Widget {
   id: string;
   song_id?: string | null;
   part_id?: string | null;
-  widget_type: 'fret_board' | 'note' | 'rhythm' | 'roman_numeral';
+  widget_type: 'fret_board' | 'note' | 'rhythm' | 'roman_numeral' | 'helix_tone';
   order_index: number;
   data: any;
 }
@@ -202,7 +203,7 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   // Teach Mode State
-  const [teachWidgetFilter, setTeachWidgetFilter] = useState<'all' | 'fret_board' | 'roman_numeral' | 'rhythm' | 'note'>('all');
+  const [teachWidgetFilter, setTeachWidgetFilter] = useState<'all' | 'fret_board' | 'roman_numeral' | 'rhythm' | 'helix_tone' | 'note'>('all');
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
   const [editingWidgetTitle, setEditingWidgetTitle] = useState<string>('');
 
@@ -262,12 +263,14 @@ const App: React.FC = () => {
     roman_numeral: boolean;
     fret_board: boolean;
     rhythm: boolean;
+    helix_tone: boolean;
     note: boolean;
   }>({
     lyrics: true,
     roman_numeral: true,
     fret_board: true,
     rhythm: true,
+    helix_tone: true,
     note: true,
   });
 
@@ -697,6 +700,7 @@ const App: React.FC = () => {
     if (w.widget_type === 'note') return 'Performance Notes';
     if (w.widget_type === 'rhythm') return 'Rhythm Groove';
     if (w.widget_type === 'roman_numeral') return 'Roman Numeral Progression';
+    if (w.widget_type === 'helix_tone') return 'HX Stomp Tone & Pedal Chain';
     return 'Lesson Widget';
   };
 
@@ -707,7 +711,8 @@ const App: React.FC = () => {
     const typeLabel =
       widgetType === 'fret_board' ? 'Fret Board Riff' :
       widgetType === 'roman_numeral' ? 'Chord Progression' :
-      widgetType === 'rhythm' ? 'Rhythm Pattern' : 'Lesson Note';
+      widgetType === 'rhythm' ? 'Rhythm Pattern' :
+      widgetType === 'helix_tone' ? 'HX Stomp Bass Rig' : 'Lesson Note';
     const defaultTitle = `${typeLabel} ${existingOfType + 1}`;
 
     let initialData: any = { title: defaultTitle };
@@ -733,6 +738,37 @@ const App: React.FC = () => {
         scale: scaleType,
         progression: []
       };
+    } else if (widgetType === 'helix_tone') {
+      initialData = {
+        title: defaultTitle,
+        instrument: 'bass',
+        playingStyle: 'Fingerstyle Bass'
+      };
+      // Automatically poll the internet for this song's Bass HX Stomp pedal chain on creation!
+      try {
+        const params = new URLSearchParams({
+          title: selectedSong.title || '',
+          artist: selectedSong.artist || '',
+          instrument: 'bass'
+        });
+        const discRes = await fetch(`${API_BASE}/tone/discover?${params.toString()}`);
+        if (discRes.ok) {
+          const disc = await discRes.json();
+          initialData = {
+            title: defaultTitle,
+            instrument: 'bass',
+            playingStyle: disc.playingStyle || 'Fingerstyle Bass',
+            tuning: disc.tuning,
+            summary: disc.summary,
+            blocks: Array.isArray(disc.recommendedChain) ? disc.recommendedChain : undefined,
+            detectedGear: Array.isArray(disc.detectedGear) ? disc.detectedGear : [],
+            customTones: Array.isArray(disc.customTones) ? disc.customTones : [],
+            lastPolledAt: new Date().toISOString()
+          };
+        }
+      } catch (_err) {
+        // Fallback to server default blocks if offline
+      }
     }
 
     try {
@@ -2520,6 +2556,7 @@ const App: React.FC = () => {
       case 'note': return <AlignLeft size={15} className="text-secondary" style={{ color: 'var(--secondary)' }} />;
       case 'rhythm': return <Activity size={15} style={{ color: 'var(--accent-green)' }} />;
       case 'roman_numeral': return <Hash size={15} style={{ color: 'var(--accent-amber)' }} />;
+      case 'helix_tone': return <Sparkles size={15} style={{ color: '#fb923c' }} />;
       default: return <Disc size={15} />;
     }
   };
@@ -2570,6 +2607,18 @@ const App: React.FC = () => {
             onSave={(data) => handleUpdateWidget(widget.id, data)}
             isPlayMode={isPlayModeFlag}
             allWidgets={allSongWidgets}
+          />
+        );
+      case 'helix_tone':
+        return (
+          <HelixToneWidget
+            key={widget.id}
+            data={widget.data || {}}
+            onChange={(data) => handleUpdateWidget(widget.id, data)}
+            songTitle={selectedSong?.title || ''}
+            songArtist={selectedSong?.artist || ''}
+            apiBase={API_BASE}
+            readOnly={isPlayModeFlag}
           />
         );
       default:
@@ -3338,6 +3387,19 @@ const App: React.FC = () => {
                     <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('rhythm')}>
                       <Activity size={14} style={{ color: 'var(--accent-green)' }} /> Rhythm Sequencer
                     </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '0.4rem 0.75rem',
+                        fontSize: '0.8rem',
+                        borderColor: 'rgba(249, 115, 22, 0.45)',
+                        color: '#fed7aa'
+                      }}
+                      onClick={() => handleAddTeachWidget('helix_tone')}
+                      title="Add a Line 6 HX Stomp Tone & Pedal Chain widget (polls the internet for Bass or Guitar rig)"
+                    >
+                      <Sparkles size={14} style={{ color: '#fb923c' }} /> HX Stomp Tone
+                    </button>
                     <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('note')}>
                       <AlignLeft size={14} style={{ color: 'var(--secondary)' }} /> Notes Notepad
                     </button>
@@ -3348,7 +3410,7 @@ const App: React.FC = () => {
                     <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', marginRight: '0.25rem' }}>
                       {selectedSong.widgets.length} {selectedSong.widgets.length === 1 ? 'widget' : 'widgets'}
                     </span>
-                    {(['all', 'fret_board', 'roman_numeral', 'rhythm', 'note'] as const).map(filterKey => (
+                    {(['all', 'fret_board', 'roman_numeral', 'rhythm', 'helix_tone', 'note'] as const).map(filterKey => (
                       <button
                         key={filterKey}
                         className={`btn ${teachWidgetFilter === filterKey ? 'btn-primary' : 'btn-secondary'}`}
@@ -3359,6 +3421,7 @@ const App: React.FC = () => {
                         {filterKey === 'fret_board' && 'Fret Boards'}
                         {filterKey === 'roman_numeral' && 'Chord Maps'}
                         {filterKey === 'rhythm' && 'Rhythms'}
+                        {filterKey === 'helix_tone' && 'HX Tones'}
                         {filterKey === 'note' && 'Notes'}
                       </button>
                     ))}
@@ -5387,6 +5450,7 @@ const App: React.FC = () => {
                           { key: 'roman_numeral', label: 'Chords' },
                           { key: 'fret_board', label: 'Fretboard' },
                           { key: 'rhythm', label: 'Rhythm' },
+                          { key: 'helix_tone', label: 'HX Tone' },
                           { key: 'note', label: 'Notes' },
                         ] as const
                       ).map(item => (

@@ -7,7 +7,7 @@ CREATE TYPE part_type_enum AS ENUM (
 );
 
 CREATE TYPE widget_type_enum AS ENUM (
-    'fret_board', 'note', 'rhythm', 'roman_numeral'
+    'fret_board', 'note', 'rhythm', 'roman_numeral', 'helix_tone'
 );
 
 -- Songs table
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS song_parts (
     lyrics TEXT DEFAULT '' NOT NULL,
     notes TEXT DEFAULT '' NOT NULL,
     linked_widget_ids JSONB DEFAULT '[]'::jsonb NOT NULL,
+    chord_data JSONB DEFAULT '{}'::jsonb NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

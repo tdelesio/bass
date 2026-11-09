@@ -71,11 +71,15 @@ async function initializeDatabaseSchema() {
     await pool.query(`
       DO $$ BEGIN
           CREATE TYPE widget_type_enum AS ENUM (
-              'fret_board', 'note', 'rhythm', 'roman_numeral'
+              'fret_board', 'note', 'rhythm', 'roman_numeral', 'helix_tone'
           );
       EXCEPTION
           WHEN duplicate_object THEN null;
       END $$;
+    `);
+
+    await pool.query(`
+      ALTER TYPE widget_type_enum ADD VALUE IF NOT EXISTS 'helix_tone';
     `);
 
     // Create folders table
@@ -1038,6 +1042,737 @@ app.delete('/api/parts/:id', async (req: Request, res: Response) => {
 
 
 /* ==========================================================================
+   LINE 6 HX STOMP TONE & PEDAL CHAIN DISCOVERY ENGINE
+   ========================================================================== */
+
+interface HxStompBlockSpec {
+  id: string;
+  category: 'dynamics' | 'filter' | 'pitch' | 'distortion' | 'amp_cab' | 'modulation' | 'eq' | 'delay' | 'reverb';
+  hxModel: string;
+  basedOn: string;
+  enabled: boolean;
+  footswitch: 'Always On' | 'FS1' | 'FS2' | 'FS3';
+  role: string;
+  settings: Record<string, string>;
+}
+
+interface CustomToneResultItem {
+  id: string;
+  toneName: string;
+  song: string;
+  band: string;
+  guitarist: string;
+  instrumentTag: string;
+  amp: string;
+  style: string;
+  comment: string;
+  downloads: number;
+  date: string;
+  url: string;
+}
+
+async function pollLine6CustomTone(
+  title: string,
+  artist: string,
+  instrument: 'bass' | 'guitar'
+): Promise<CustomToneResultItem[]> {
+  const cleanTitle = title.replace(/\s*\([^)]*\)\s*/g, '').replace(/\s*\[[^\]]*\]\s*/g, '').trim();
+  const cleanArtist = artist.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const terms = Array.from(
+    new Set(
+      [
+        cleanTitle && cleanArtist ? `${cleanTitle} ${cleanArtist}` : '',
+        cleanTitle,
+        cleanArtist ? `${cleanArtist} ${instrument}` : '',
+        cleanArtist
+      ].filter(Boolean)
+    )
+  ).slice(0, 3);
+
+  const collected: CustomToneResultItem[] = [];
+  const seenIds = new Set<string>();
+
+  for (const term of terms) {
+    if (collected.length >= 6) break;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6500);
+      const url = `https://line6.com/customtone/search/?submitted=1&family=hx_stomp&search_term=${encodeURIComponent(term)}`;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: UG_BROWSER_HEADERS
+      });
+      clearTimeout(timeout);
+      if (!res.ok) continue;
+
+      const html = await res.text();
+      const toneBlocks = html.split(/<div class="tone">/i).slice(1);
+
+      for (const block of toneBlocks) {
+        const idMatch = block.match(/\/customtone\/tone\/(\d+)\//i);
+        if (!idMatch) continue;
+        const id = idMatch[1];
+        if (seenIds.has(id)) continue;
+
+        const extractField = (label: string) => {
+          const re = new RegExp(`${label}:\\s*([\\s\\S]*?)<\\/(?:a|li)>`, 'i');
+          const m = block.match(re);
+          return m ? decodeHtmlEntities(m[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim() : '';
+        };
+
+        const toneName = extractField('TONE NAME') || 'HX Stomp Preset';
+        const song = extractField('SONG');
+        const band = extractField('BAND');
+        const guitarist = extractField('GUITARIST');
+        const amp = extractField('AMP').replace(/^---+$/, '').trim();
+
+        const commentMatch = block.match(/<div class="comment[^"]*">([\s\S]*?)<\/div>/i);
+        const comment = commentMatch
+          ? decodeHtmlEntities(commentMatch[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+          : '';
+
+        const dlMatch = block.match(/(\d+)\s+downloads/i);
+        const downloads = dlMatch ? parseInt(dlMatch[1], 10) : 0;
+
+        const dateMatch = block.match(/glyphicon-calendar[^>]*><\/span>\s*([0-9/]+)/i);
+        const date = dateMatch ? dateMatch[1].trim() : '';
+
+        const styleMatch = block.match(/<ul class="col-xs-4">\s*<li>([\s\S]*?)<\/li>/i);
+        const style = styleMatch
+          ? decodeHtmlEntities(styleMatch[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+          : '';
+
+        seenIds.add(id);
+        collected.push({
+          id,
+          toneName,
+          song,
+          band,
+          guitarist,
+          instrumentTag: '',
+          amp,
+          style,
+          comment,
+          downloads,
+          date,
+          url: `https://line6.com/customtone/tone/${id}/`
+        });
+      }
+    } catch (_err) {
+      // Continue to next term
+    }
+  }
+
+  // Enrich top 3 results with detail page metadata (#tone_guitar and full #tone_comments)
+  await Promise.all(
+    collected.slice(0, 3).map(async item => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4500);
+        const detailRes = await fetch(item.url, {
+          signal: controller.signal,
+          headers: UG_BROWSER_HEADERS
+        });
+        clearTimeout(timeout);
+        if (!detailRes.ok) return;
+        const detailHtml = await detailRes.text();
+        const guitarMatch = detailHtml.match(/id="tone_guitar">([\s\S]*?)<\/div>/i);
+        if (guitarMatch) {
+          item.instrumentTag = decodeHtmlEntities(guitarMatch[1].replace(/<[^>]+>/g, '')).trim();
+        }
+        const fullCommentMatch = detailHtml.match(/id="tone_comments">([\s\S]*?)<\/div>/i);
+        if (fullCommentMatch) {
+          const fullComment = decodeHtmlEntities(fullCommentMatch[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+          if (fullComment && fullComment.length > item.comment.length) {
+            item.comment = fullComment;
+          }
+        }
+      } catch (_err) {
+        // Ignore enrichment errors
+      }
+    })
+  );
+
+  // Score and sort results so bass presets bubble to top for 'bass' and guitar presets for 'guitar'
+  const artistLower = cleanArtist.toLowerCase();
+  const titleLower = cleanTitle.toLowerCase();
+  const bassRegex = /\b(bass|svt|ampeg|sansamp|b7k|darkglass|flea|wolstenholme|geddy|chancellor|burton|pastorius|commerford|kaye|entwistle|waters|deacon|mcKagan|claypool|wooten|pbass|jbass|jazz bass|p-bass)\b/i;
+
+  collected.sort((a, b) => {
+    const scoreItem = (it: CustomToneResultItem) => {
+      let s = 0;
+      const blob = `${it.toneName} ${it.song} ${it.band} ${it.guitarist} ${it.instrumentTag} ${it.comment}`.toLowerCase();
+      if (artistLower && blob.includes(artistLower)) s += 30;
+      if (titleLower && blob.includes(titleLower)) s += 25;
+      const looksLikeBass = bassRegex.test(blob) || /bass/i.test(it.instrumentTag);
+      if (instrument === 'bass' && looksLikeBass) s += 40;
+      if (instrument === 'guitar' && !looksLikeBass) s += 25;
+      s += Math.min(20, Math.floor(it.downloads / 250));
+      return s;
+    };
+    return scoreItem(b) - scoreItem(a);
+  });
+
+  return collected.slice(0, 6);
+}
+
+async function pollSongsterrTrackInfo(
+  title: string,
+  artist: string,
+  instrument: 'bass' | 'guitar'
+): Promise<{
+  matchedSongTitle?: string;
+  matchedArtist?: string;
+  playingStyle?: string;
+  trackNames: string[];
+  tuning?: string;
+}> {
+  const cleanTitle = title.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const cleanArtist = artist.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const query = [cleanTitle, cleanArtist].filter(Boolean).join(' ');
+  if (!query) return { trackNames: [] };
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://www.songsterr.com/api/songs?pattern=${encodeURIComponent(query)}`, {
+      signal: controller.signal,
+      headers: UG_BROWSER_HEADERS
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return { trackNames: [] };
+
+    const items: any = await res.json();
+    if (!Array.isArray(items) || items.length === 0) return { trackNames: [] };
+
+    const artistLower = cleanArtist.toLowerCase();
+    const best =
+      items.find((it: any) => artistLower && String(it.artist || '').toLowerCase().includes(artistLower)) ||
+      items[0];
+
+    const tracks = Array.isArray(best?.tracks) ? best.tracks : [];
+    const relevantTracks = tracks.filter((t: any) => {
+      const inst = String(t?.instrument || '').toLowerCase();
+      const name = String(t?.name || '').toLowerCase();
+      if (instrument === 'bass') {
+        return inst.includes('bass') || name.includes('bass');
+      }
+      return (inst.includes('guitar') || name.includes('guitar')) && !inst.includes('bass');
+    });
+
+    const trackNames = relevantTracks.map((t: any) => `${t.name || t.instrument} (${t.instrument || ''})`.trim());
+    const primaryInst = String(relevantTracks[0]?.instrument || '');
+    let playingStyle = '';
+    if (instrument === 'bass') {
+      if (/pick/i.test(primaryInst)) playingStyle = 'Picked Bass (Aggressive Attack)';
+      else if (/slap/i.test(primaryInst)) playingStyle = 'Slap & Pop Bass (Percussive Funk)';
+      else if (/fretless/i.test(primaryInst)) playingStyle = 'Fretless Bass (Warm Mwah & Chorus)';
+      else if (/synth/i.test(primaryInst)) playingStyle = 'Synth / Sub-Octave Bass';
+      else if (primaryInst) playingStyle = 'Fingerstyle Bass (Warm Punch)';
+    } else {
+      if (/distortion/i.test(primaryInst)) playingStyle = 'High-Gain / Distortion Guitar';
+      else if (/overdriven/i.test(primaryInst)) playingStyle = 'Overdriven / Edge-of-Breakup Guitar';
+      else if (/clean|jazz/i.test(primaryInst)) playingStyle = 'Clean / Modulated Electric Guitar';
+      else if (/acoustic/i.test(primaryInst)) playingStyle = 'Acoustic / Piezo Simulator';
+      else if (primaryInst) playingStyle = primaryInst;
+    }
+
+    let tuningStr: string | undefined;
+    if (Array.isArray(relevantTracks[0]?.tuning) && relevantTracks[0].tuning.length > 0) {
+      const midiToNote = (m: number) => ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][m % 12];
+      const notes = [...relevantTracks[0].tuning].reverse().map(midiToNote);
+      tuningStr = notes.join(' ');
+    }
+
+    return {
+      matchedSongTitle: best?.title,
+      matchedArtist: best?.artist,
+      playingStyle: playingStyle || undefined,
+      trackNames: trackNames.slice(0, 4),
+      tuning: tuningStr
+    };
+  } catch (_err) {
+    return { trackNames: [] };
+  }
+}
+
+async function pollWebRigSnippets(
+  title: string,
+  artist: string,
+  instrument: 'bass' | 'guitar'
+): Promise<string[]> {
+  const cleanTitle = title.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const cleanArtist = artist.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const q = `"${cleanTitle}" "${cleanArtist}" ${instrument} tone pedals amp rig`;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+      signal: controller.signal,
+      headers: UG_BROWSER_HEADERS
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const snippets: string[] = [];
+    const regex = /<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(html)) !== null && snippets.length < 6) {
+      const cleaned = decodeHtmlEntities(m[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+      if (cleaned) snippets.push(cleaned);
+    }
+    return snippets;
+  } catch (_err) {
+    return [];
+  }
+}
+
+function buildHxStompToneRecommendations(params: {
+  title: string;
+  artist: string;
+  instrument: 'bass' | 'guitar';
+  customTones: CustomToneResultItem[];
+  songsterrInfo: {
+    playingStyle?: string;
+    trackNames: string[];
+    tuning?: string;
+  };
+  webSnippets: string[];
+}) {
+  const { title, artist, instrument, customTones, songsterrInfo, webSnippets } = params;
+  const combinedText = [
+    title,
+    artist,
+    songsterrInfo.playingStyle || '',
+    ...songsterrInfo.trackNames,
+    ...customTones.map(c => `${c.toneName} ${c.amp} ${c.style} ${c.comment} ${c.guitarist}`),
+    ...webSnippets
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  const detectedGear: string[] = [];
+  const addGear = (label: string) => {
+    if (!detectedGear.includes(label)) detectedGear.push(label);
+  };
+
+  if (instrument === 'bass') {
+    // Detect signature songs/artists & gear keywords for Bass
+    const hasMuseFuzz = /\b(muse|hysteria|wolstenholme|animato|woolly mammoth|fuzz factory)\b/i.test(combinedText);
+    const hasBigMuff = /\b(big muff|muff|russian|cliff burton|anesthesia|black keys|royal blood|jack white)\b/i.test(combinedText);
+    const hasDarkglass = /\b(darkglass|b7k|alpha omega|vintage microtubes|periphery|metal|dingwall|architects|tool|chancellor)\b/i.test(combinedText);
+    const hasSansAmp = /\b(sansamp|tech 21|geddy|rush|blink|green day|dirnt|hoppus|grunge|nirvana|alice in chains)\b/i.test(combinedText);
+    const hasFleaGK = /\b(flea|red hot chili|rhcp|under the bridge|californication|can't stop|gallien|gk\s*800|800rb)\b/i.test(combinedText);
+    const hasMotownB15 = /\b(motown|jamerson|b-15|b15|fliptop|flip-top|soul|marvin gaye|stevie wonder|vulfpeck|joe dart|duck tales|ducktales|theme)\b/i.test(combinedText);
+    const hasChorus = /\b(chorus|ce-1|ceb-3|small clone|duff|guns n|new order|hook|cure|eighties|80s|fretless|come as you are|schism)\b/i.test(combinedText);
+    const hasEnvelopeFilter = /\b(mu-tron|mutron|envelope|auto-wah|autowah|q-tron|funk|slap|bootsy|thundercat|jamiroquai|flea|sir psycho)\b/i.test(combinedText);
+    const hasOctave = /\b(octave|oc-2|oc2|pogs|sub|synth|royal blood|sledgehammer|peter gabriel|dua lipa)\b/i.test(combinedText);
+    const hasFlangerPhaser = /\b(flanger|phaser|phase 90|forty six|46 & 2|tool|van halen|thin lizzy)\b/i.test(combinedText);
+    const isPicked = /pick/i.test(songsterrInfo.playingStyle || '') || /\b(pick|pink floyd|money|waters|punk|green day|tool|muse)\b/i.test(combinedText);
+
+    // 1. Compressor Block (Slot 1)
+    const compBlock: HxStompBlockSpec = hasMotownB15 || !isPicked
+      ? {
+          id: 'blk-1',
+          category: 'dynamics',
+          hxModel: 'LA Studio Comp',
+          basedOn: 'Teletronix LA-2A Studio Optical Compressor',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Smooth optical studio compression to glue low-end fundamentals and sustain.',
+          settings: { 'Peak Reduc': '5.5', Gain: '5.0', Type: 'Compress', Mix: '80%' }
+        }
+      : {
+          id: 'blk-1',
+          category: 'dynamics',
+          hxModel: 'Rochester Comp',
+          basedOn: 'Ashly CLX-52 / BBE Opto Stomp Bass Compressor',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Tight transient control that preserves pick/slap attack without pumping.',
+          settings: { Threshold: '-24 dB', Ratio: '4:1', Attack: '15 ms', Gain: '3.5 dB' }
+        };
+    addGear(compBlock.basedOn);
+
+    // 2. Pitch / Filter / Synth Block (Optional Slot 2)
+    let filterOrPitchBlock: HxStompBlockSpec | null = null;
+    if (hasEnvelopeFilter) {
+      filterOrPitchBlock = {
+        id: 'blk-2',
+        category: 'filter',
+        hxModel: 'Mutant Filter',
+        basedOn: 'Musitronics Mu-Tron III Envelope Filter',
+        enabled: true,
+        footswitch: 'FS1',
+        role: 'Vocal, percussive funk filter sweep triggered by picking/slap dynamics.',
+        settings: { Mode: 'BP (Bandpass)', Drive: '4.5', Peak: '6.5', Range: 'Low', Mix: '100%' }
+      };
+      addGear('Mu-Tron III Envelope Filter');
+    } else if (hasOctave || hasMuseFuzz) {
+      filterOrPitchBlock = {
+        id: 'blk-2',
+        category: 'pitch',
+        hxModel: hasMuseFuzz ? '3 OSC Synth' : 'Twin Harmony',
+        basedOn: hasMuseFuzz ? 'Analog 3-Oscillator Synth Bass' : 'Sub-Octave Divider (BOSS OC-2 style)',
+        enabled: !hasMuseFuzz,
+        footswitch: 'FS1',
+        role: hasMuseFuzz
+          ? 'Optional synth sub-layer for the chorus/interlude synth-bass texture.'
+          : 'Adds -1 octave sub weight underneath single-note bass riffs.',
+        settings: hasMuseFuzz
+          ? { 'Osc 1': 'Saw (-1 Oct)', Cut: '4.2', Resonance: '5.5', Mix: '35%' }
+          : { 'Interval 1': '-1 Oct', 'Voice 1': '65%',Mix: '45%' }
+      };
+      addGear(filterOrPitchBlock.basedOn);
+    }
+
+    // 3. Drive / Fuzz / DI Preamp Block (Slot 3)
+    let driveBlock: HxStompBlockSpec;
+    if (hasMuseFuzz) {
+      driveBlock = {
+        id: 'blk-3',
+        category: 'distortion',
+        hxModel: 'Industrial Fuzz',
+        basedOn: 'Z.Vex Woolly Mammoth / Human Gear Animato Fuzz',
+        enabled: true,
+        footswitch: 'FS2',
+        role: 'Biting, gated saw-wave bass fuzz with parallel clean blend for fast 16th-note riffs.',
+        settings: { Stab: '7.5', Gate: '3.0', Pinch: '5.5', Drive: '7.0', Blend: '65%' }
+      };
+      addGear('Human Gear Animato / Z.Vex Woolly Mammoth Bass Fuzz');
+      addGear('EHX Russian Big Muff Pi');
+    } else if (hasBigMuff) {
+      driveBlock = {
+        id: 'blk-3',
+        category: 'distortion',
+        hxModel: 'Russian Big Pi',
+        basedOn: 'Electro-Harmonix Green Russian Big Muff Pi',
+        enabled: true,
+        footswitch: 'FS2',
+        role: 'Thick, wooly low-end fuzz sustain that retains deep bass fundamentals.',
+        settings: { Sustain: '6.8', Tone: '5.2', Level: '6.5', Blend: '70%' }
+      };
+      addGear('Electro-Harmonix Green Russian Big Muff Pi');
+    } else if (hasDarkglass) {
+      driveBlock = {
+        id: 'blk-3',
+        category: 'distortion',
+        hxModel: 'Obsidian 7000',
+        basedOn: 'Darkglass Electronics Microtubes B7K Ultra',
+        enabled: true,
+        footswitch: 'FS2',
+        role: 'Modern aggressive upper-mid grind and clank mixed with clean sub-bass.',
+        settings: { Drive: '6.2', Blend: '70%', Attack: 'Boost', Grunt: 'Fat', 'Hi Mids': '+3.5 dB' }
+      };
+      addGear('Darkglass Microtubes B7K Ultra');
+    } else {
+      driveBlock = {
+        id: 'blk-3',
+        category: 'distortion',
+        hxModel: 'ZeroAmp Bass DI',
+        basedOn: 'Tech 21 SansAmp Bass Driver DI',
+        enabled: hasSansAmp || isPicked,
+        footswitch: hasSansAmp ? 'Always On' : 'FS2',
+        role: 'Warm tube-emulated DI harmonic grit and presence; kick on for driven sections.',
+        settings: { Drive: isPicked ? '5.2' : '4.0', Bass: '5.8', Treble: '6.2', Presence: '5.5', Blend: '75%' }
+      };
+      addGear('Tech 21 SansAmp Bass Driver DI');
+    }
+
+    // 4. Bass Amp + Cab Block (Slot 4)
+    let ampBlock: HxStompBlockSpec;
+    if (hasFleaGK) {
+      ampBlock = {
+        id: 'blk-4',
+        category: 'amp_cab',
+        hxModel: 'G Cougar 800 + 4x10 Rhino',
+        basedOn: 'Gallien-Krueger GK 800RB + 4x10 Cab',
+        enabled: true,
+        footswitch: 'Always On',
+        role: 'Punchy, fast-transient solid-state bi-amp articulation with tight low-mid bark.',
+        settings: { Boost: '5.5', 'Lo Cut': 'On', 'Lo Mid': '6.0', 'Hi Mid': '6.5', Presence: '6.0' }
+      };
+      addGear('Gallien-Krueger GK 800RB Amplifier');
+    } else if (hasMotownB15) {
+      ampBlock = {
+        id: 'blk-4',
+        category: 'amp_cab',
+        hxModel: 'Flip Top + 1x15 Flip Top',
+        basedOn: '1960s Ampeg B-15N Portaflex Tube Combo',
+        enabled: true,
+        footswitch: 'Always On',
+        role: 'Warm, round vintage 60s/70s studio tube thump that sits effortlessly in the pocket.',
+        settings: { Drive: '4.5', Bass: '6.5', Treble: '4.2', 'Cab Mic': '47 Cond FET' }
+      };
+      addGear('Ampeg B-15N Portaflex Tube Flip-Top');
+    } else {
+      ampBlock = {
+        id: 'blk-4',
+        category: 'amp_cab',
+        hxModel: isPicked ? 'SV Beast Brt + 8x10 SVT Beast' : 'SV Beast Nrm + 8x10 SVT Beast',
+        basedOn: isPicked ? 'Ampeg SVT (Bright Ch) + 8x10 Cab' : 'Ampeg SVT (Normal Ch) + 8x10 Cab',
+        enabled: true,
+        footswitch: 'Always On',
+        role: 'Classic 300W all-tube rock/funk bass stack with authoritative low-end and woody midrange.',
+        settings: {
+          Drive: isPicked ? '5.5' : '4.5',
+          Bass: '6.0',
+          Midrange: '6.5',
+          'Mid Freq': '800 Hz',
+          Treble: isPicked ? '6.2' : '5.0',
+          'Ultra Lo': 'On'
+        }
+      };
+      addGear('Ampeg SVT Classic + 8x10 SVT Cab');
+    }
+
+    // 5. Modulation Block (Slot 5)
+    const modBlock: HxStompBlockSpec = hasFlangerPhaser
+      ? {
+          id: 'blk-5',
+          category: 'modulation',
+          hxModel: 'Gray Flanger',
+          basedOn: 'MXR M117 Flanger',
+          enabled: true,
+          footswitch: 'FS3',
+          role: 'Metallic jet-sweep modulation on picked bass riffs and atmospheric interludes.',
+          settings: { Manual: '5.5', Width: '6.0', Speed: '2.2', Regen: '4.5', Mix: '45%' }
+        }
+      : {
+          id: 'blk-5',
+          category: 'modulation',
+          hxModel: '70s Chorus',
+          basedOn: 'BOSS CE-1 Chorus Ensemble',
+          enabled: hasChorus || hasFleaGK,
+          footswitch: 'FS3',
+          role: 'Warm analog chorus shimmer on upper-register bass chords, intros, and melodic hooks.',
+          settings: { 'Chorus Intensity': '4.5', Mode: 'Chorus', 'Low Cut': '180 Hz', Mix: '40%' }
+        };
+    if (hasChorus || hasFleaGK || hasFlangerPhaser) {
+      addGear(modBlock.basedOn);
+    }
+
+    // 6. Studio Output EQ Block (Slot 6)
+    const eqBlock: HxStompBlockSpec = {
+      id: 'blk-6',
+      category: 'eq',
+      hxModel: '10 Band Graphic',
+      basedOn: 'MXR M108 10-Band Graphic EQ (Low-Cut @ 35Hz)',
+      enabled: true,
+      footswitch: 'Always On',
+      role: 'Tightens sub-35Hz rumble and adds 800Hz–1.5kHz finger/pick definition in the mix.',
+      settings: { '62.5 Hz': '+2.0 dB', '250 Hz': '-1.5 dB', '800 Hz': '+2.5 dB', '2 kHz': '+1.5 dB', Level: '0.0 dB' }
+    };
+
+    const primaryChain: HxStompBlockSpec[] = [
+      compBlock,
+      ...(filterOrPitchBlock ? [filterOrPitchBlock] : []),
+      driveBlock,
+      ampBlock,
+      modBlock,
+      eqBlock
+    ].map((b, idx) => ({ ...b, id: `blk-${idx + 1}` }));
+
+    const cleanChain: HxStompBlockSpec[] = [
+      compBlock,
+      {
+        ...driveBlock,
+        hxModel: 'ZeroAmp Bass DI',
+        basedOn: 'Tech 21 SansAmp Bass Driver DI (Clean Tube Warmth)',
+        enabled: true,
+        footswitch: 'Always On' as const,
+        settings: { Drive: '3.2', Bass: '5.8', Treble: '5.5', Blend: '55%' }
+      },
+      ampBlock,
+      eqBlock
+    ].map((b, idx) => ({ ...b, id: `clean-${idx + 1}` }));
+
+    return {
+      instrument: 'bass' as const,
+      playingStyle: songsterrInfo.playingStyle || (isPicked ? 'Picked Bass' : 'Fingerstyle Bass'),
+      tuning: songsterrInfo.tuning,
+      detectedGear,
+      summary: `HX Stomp Bass Signal Chain tailored for "${title || 'this song'}"${artist ? ` by ${artist}` : ''}. Uses ${ampBlock.hxModel} (${ampBlock.basedOn}) with ${driveBlock.hxModel} (${driveBlock.basedOn}) and ${compBlock.hxModel}.`,
+      recommendedChain: primaryChain,
+      presets: [
+        {
+          id: 'preset-full-bass',
+          name: `${title || 'Song'} — Full HX Stomp Bass Rig`,
+          description: `Complete 6-block HX Stomp bass chain with ${compBlock.hxModel}, ${driveBlock.hxModel}, and ${ampBlock.hxModel}.`,
+          chain: primaryChain
+        },
+        {
+          id: 'preset-clean-bass',
+          name: `${title || 'Song'} — Clean Pocket / Verse Bass DI`,
+          description: 'Warm, studio-compressed clean tube bass foundation for verses and groove sections.',
+          chain: cleanChain
+        }
+      ]
+    };
+  } else {
+    // GUITAR TONE & PEDAL CHAIN BUILDER
+    const isHighGain =
+      /distortion/i.test(songsterrInfo.playingStyle || '') ||
+      /\b(muse|metal|metallica|tool|nirvana|grunge|hard rock|rectifier|friedman|marshall|plexi|jcm|fuzz|hysteria)\b/i.test(combinedText);
+    const isCleanFunkOrChime =
+      /clean/i.test(songsterrInfo.playingStyle || '') ||
+      /\b(rhcp|red hot chili|frusciante|under the bridge|fender|twin|strat|chorus|funk|police|u2|smiths|pink floyd|gilmour)\b/i.test(combinedText);
+
+    const compBlock: HxStompBlockSpec = {
+      id: 'gblk-1',
+      category: 'dynamics',
+      hxModel: 'Red Squeeze',
+      basedOn: 'MXR Dyna Comp',
+      enabled: isCleanFunkOrChime,
+      footswitch: isCleanFunkOrChime ? 'Always On' : 'FS1',
+      role: 'Adds sustain and snappy single-coil attack (John Frusciante / David Gilmour style).',
+      settings: { Sensitivity: '5.5', Mix: '75%', Level: '+1.5 dB' }
+    };
+    addGear('MXR Dyna Comp Compressor');
+
+    const driveBlock: HxStompBlockSpec = isHighGain
+      ? {
+          id: 'gblk-2',
+          category: 'distortion',
+          hxModel: 'Compulsive Drive',
+          basedOn: 'Fulltone OCD / Marshall-Style Overdrive',
+          enabled: true,
+          footswitch: 'FS1',
+          role: 'Pushes the amp into rich harmonic saturation and tightens low strings.',
+          settings: { Gain: '6.0', Tone: '6.2', Peak: 'High', Level: '6.5' }
+        }
+      : {
+          id: 'gblk-2',
+          category: 'distortion',
+          hxModel: 'Minotaur',
+          basedOn: 'Klon Centaur Transparent Overdrive',
+          enabled: true,
+          footswitch: 'FS1',
+          role: 'Edge-of-breakup midrange warmth and lead boost.',
+          settings: { Gain: '3.8', Treble: '6.0', Output: '6.5' }
+        };
+    addGear(driveBlock.basedOn);
+
+    const fuzzOrBoostBlock: HxStompBlockSpec = {
+      id: 'gblk-3',
+      category: 'distortion',
+      hxModel: 'Triangle Fuzz',
+      basedOn: 'Electro-Harmonix Triangle Big Muff Pi',
+      enabled: false,
+      footswitch: 'FS2',
+      role: 'Kick on FS2 for soaring lead solos and heavy chorus walls of fuzz.',
+      settings: { Sustain: '7.0', Tone: '5.8', Level: '6.5' }
+    };
+    addGear('EHX Triangle Big Muff / Solo Lead Boost');
+
+    const ampBlock: HxStompBlockSpec = isHighGain
+      ? {
+          id: 'gblk-4',
+          category: 'amp_cab',
+          hxModel: 'Brit 2204 + 4x12 Greenback25',
+          basedOn: 'Marshall JCM800 2204 + 4x12 Celestion Greenback Cab',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Punchy British rock crunch and articulate chord separation.',
+          settings: { Preamp: '6.5', Bass: '5.5', Mid: '6.8', Treble: '6.0', Presence: '5.5' }
+        }
+      : {
+          id: 'gblk-4',
+          category: 'amp_cab',
+          hxModel: 'US Double Nrm + 2x12 Double C12N',
+          basedOn: 'Fender Twin Reverb + 2x12 Jensen Cab',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Bell-like clean headroom and warm pedal-platform response.',
+          settings: { Drive: '4.2', Bass: '5.5', Mid: '6.0', Treble: '6.2', Presence: '5.0' }
+        };
+    addGear(ampBlock.basedOn);
+
+    const modBlock: HxStompBlockSpec = {
+      id: 'gblk-5',
+      category: 'modulation',
+      hxModel: '70s Chorus',
+      basedOn: 'BOSS CE-1 Chorus Ensemble',
+      enabled: isCleanFunkOrChime,
+      footswitch: 'FS3',
+      role: 'Lush stereo-style analog chorus movement on arpeggios and clean chords.',
+      settings: { 'Chorus Intensity': '4.8', Mode: 'Chorus', Mix: '45%' }
+    };
+    addGear('BOSS CE-1 Chorus Ensemble');
+
+    const delayReverbBlock: HxStompBlockSpec = {
+      id: 'gblk-6',
+      category: 'delay',
+      hxModel: 'Transistor Tape',
+      basedOn: 'Maestro Echoplex EP-3 Tape Delay',
+      enabled: true,
+      footswitch: 'Always On',
+      role: 'Adds 3D studio depth and vintage tape echo trails.',
+      settings: { Time: '360 ms', Feedback: '22%', 'Wow Flt': '3.5', Mix: '24%' }
+    };
+    addGear('Maestro Echoplex EP-3 Tape Echo');
+
+    const guitarChain = [compBlock, driveBlock, fuzzOrBoostBlock, ampBlock, modBlock, delayReverbBlock];
+
+    return {
+      instrument: 'guitar' as const,
+      playingStyle: songsterrInfo.playingStyle || (isHighGain ? 'Driven Rock Guitar' : 'Clean / Edge-of-Breakup Guitar'),
+      tuning: songsterrInfo.tuning,
+      detectedGear,
+      summary: `HX Stomp Guitar Signal Chain tailored for "${title || 'this song'}"${artist ? ` by ${artist}` : ''}. Uses ${ampBlock.hxModel} (${ampBlock.basedOn}) paired with ${driveBlock.hxModel} and ${delayReverbBlock.hxModel}.`,
+      recommendedChain: guitarChain,
+      presets: [
+        {
+          id: 'preset-full-guitar',
+          name: `${title || 'Song'} — Full HX Stomp Guitar Rig`,
+          description: `6-block HX Stomp guitar chain with ${driveBlock.hxModel}, ${ampBlock.hxModel}, and ${delayReverbBlock.hxModel}.`,
+          chain: guitarChain
+        }
+      ]
+    };
+  }
+}
+
+app.get('/api/tone/discover', async (req: Request, res: Response) => {
+  const title = String(req.query.title || '').replace(/[=_~*]+$/g, '').trim();
+  const artist = String(req.query.artist || '').replace(/[=_~*]+$/g, '').trim();
+  const instrument: 'bass' | 'guitar' =
+    String(req.query.instrument || 'bass').toLowerCase() === 'guitar' ? 'guitar' : 'bass';
+
+  try {
+    const [customTones, songsterrInfo, webSnippets] = await Promise.all([
+      pollLine6CustomTone(title, artist, instrument),
+      pollSongsterrTrackInfo(title, artist, instrument),
+      pollWebRigSnippets(title, artist, instrument)
+    ]);
+
+    const recommendation = buildHxStompToneRecommendations({
+      title,
+      artist,
+      instrument,
+      customTones,
+      songsterrInfo,
+      webSnippets
+    });
+
+    res.json({
+      query: { title, artist, instrument },
+      ...recommendation,
+      customTones,
+      webSnippets,
+      sourcesPolled: [
+        'Line 6 CustomTone (HX Stomp)',
+        'Songsterr Instrument & Track API',
+        'Web Rig & Pedalboard Search'
+      ]
+    });
+  } catch (err: any) {
+    console.error('❌ Tone discovery error:', err);
+    res.status(500).json({ error: 'Failed to poll tone and pedal chain information' });
+  }
+});
+
+/* ==========================================================================
    WIDGET ROUTES (TEACH MODE)
    ========================================================================== */
 
@@ -1052,6 +1787,56 @@ const getDefaultWidgetData = (widget_type: string, data?: any) => {
     return { timeSignature: '4/4', tempo: 100, subdivisions: 4, beats: Array(16).fill(false) };
   } else if (widget_type === 'roman_numeral') {
     return { key: 'C', scale: 'major', progression: [] };
+  } else if (widget_type === 'helix_tone') {
+    return {
+      instrument: 'bass',
+      playingStyle: 'Fingerstyle Bass',
+      summary: 'Click "Poll Internet for Tone" to auto-detect the Line 6 HX Stomp pedal chain for this song, or customize blocks below.',
+      blocks: [
+        {
+          id: 'blk-1',
+          category: 'dynamics',
+          hxModel: 'LA Studio Comp',
+          basedOn: 'Teletronix LA-2A Studio Compressor',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Smooth studio optical compression for even bass sustain.',
+          settings: { 'Peak Reduc': '5.5', Gain: '5.0', Mix: '80%' }
+        },
+        {
+          id: 'blk-2',
+          category: 'distortion',
+          hxModel: 'ZeroAmp Bass DI',
+          basedOn: 'Tech 21 SansAmp Bass Driver DI',
+          enabled: true,
+          footswitch: 'FS1',
+          role: 'Warm tube-style DI harmonic grit and parallel blend.',
+          settings: { Drive: '4.5', Bass: '5.8', Treble: '6.0', Blend: '75%' }
+        },
+        {
+          id: 'blk-3',
+          category: 'amp_cab',
+          hxModel: 'SV Beast Nrm + 8x10 SVT Beast',
+          basedOn: 'Ampeg SVT (Normal) + 8x10 SVT Cab',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Classic 300W all-tube bass stack foundation.',
+          settings: { Drive: '4.5', Bass: '6.0', Midrange: '6.5', Treble: '5.2' }
+        },
+        {
+          id: 'blk-4',
+          category: 'eq',
+          hxModel: '10 Band Graphic',
+          basedOn: 'MXR 10-Band Graphic EQ',
+          enabled: true,
+          footswitch: 'Always On',
+          role: 'Sculpts 800Hz midrange punch and tightens low end.',
+          settings: { '62.5 Hz': '+2.0 dB', '800 Hz': '+2.5 dB', Level: '0.0 dB' }
+        }
+      ],
+      detectedGear: [],
+      customTones: []
+    };
   }
   return {};
 };
