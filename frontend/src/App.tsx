@@ -33,7 +33,9 @@ import {
   VolumeX,
   Clock,
   FileText,
-  Check
+  Check,
+  Menu,
+  X
 } from 'lucide-react';
 import FretBoardWidget from './components/FretBoardWidget';
 import NoteWidget from './components/NoteWidget';
@@ -201,6 +203,15 @@ const App: React.FC = () => {
   // 3-Mode State: 'teach' | 'edit' | 'play'
   const [activeMode, setActiveMode] = useState<AppMode>('teach');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+
+  const handleToggleSidebarMenu = () => {
+    if (window.innerWidth <= 968) {
+      setIsSidebarOpen(prev => !prev);
+    } else {
+      setIsSidebarCollapsed(prev => !prev);
+    }
+  };
 
   // Teach Mode State
   const [teachWidgetFilter, setTeachWidgetFilter] = useState<'all' | 'fret_board' | 'roman_numeral' | 'rhythm' | 'helix_tone' | 'note'>('all');
@@ -231,6 +242,7 @@ const App: React.FC = () => {
   const [partLyricsDrafts, setPartLyricsDrafts] = useState<Record<string, string>>({});
   const [partNotesDrafts, setPartNotesDrafts] = useState<Record<string, string>>({});
   const [savedPartFeedbackId, setSavedPartFeedbackId] = useState<string | null>(null);
+  const [copiedSongLinkId, setCopiedSongLinkId] = useState<string | null>(null);
 
   // Lyrics & Structure Tooling Modal State (Step 1: Search & Fetch Lyrics -> Step 2: Smart Section Splitter)
   const [isLyricsToolOpen, setIsLyricsToolOpen] = useState<boolean>(false);
@@ -365,14 +377,54 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCopySongLink = async (songId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const shareUrl = `${window.location.origin}${window.location.pathname}?songId=${encodeURIComponent(songId)}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedSongLinkId(songId);
+      setTimeout(() => {
+        setCopiedSongLinkId(prev => (prev === songId ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy song link:', err);
+    }
+  };
+
   const fetchSongs = async (autoSelectFirst = true) => {
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE}/songs`);
-      const data = await res.json();
+      const data: Song[] = await res.json();
       setSongs(data);
       if (autoSelectFirst && data.length > 0 && !selectedSongIdRef.current) {
-        fetchSongDetails(data[0].id);
+        const params = new URLSearchParams(window.location.search);
+        const urlSongId = params.get('songId') || params.get('song');
+        const matchedSong = urlSongId ? data.find(s => s.id === urlSongId) : undefined;
+        const targetSong = matchedSong || data[0];
+
+        if (matchedSong) {
+          // Ensure its parent folder is expanded if it belongs to one
+          if (matchedSong.folder_id) {
+            setExpandedFolders(prev => ({ ...prev, [matchedSong.folder_id!]: true }));
+          }
+          // Keep the browser URL bar clean at the main domain after resolving the deep link
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        fetchSongDetails(targetSong.id);
       } else {
         setLoading(false);
       }
@@ -384,6 +436,7 @@ const App: React.FC = () => {
 
   const fetchSongDetails = async (songId: string) => {
     const isSwitchingSong = selectedSongIdRef.current !== songId;
+    setIsSidebarOpen(false);
     try {
       const res = await fetch(`${API_BASE}/songs/${songId}`);
       if (!res.ok) throw new Error('Failed to fetch song details');
@@ -3041,13 +3094,23 @@ const App: React.FC = () => {
             {song.artist}
           </div>
         </div>
-        <button 
-          className="folder-btn" 
-          onClick={(e) => handleDeleteSong(song.id, e)}
-          title="Delete Song"
-        >
-          <Trash2 size={14} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <button
+            className="folder-btn"
+            onClick={(e) => handleCopySongLink(song.id, e)}
+            title={copiedSongLinkId === song.id ? 'Link Copied!' : 'Copy Direct Link to Song'}
+            style={{ color: copiedSongLinkId === song.id ? '#34d399' : undefined }}
+          >
+            {copiedSongLinkId === song.id ? <Check size={13} /> : <Link2 size={13} />}
+          </button>
+          <button 
+            className="folder-btn" 
+            onClick={(e) => handleDeleteSong(song.id, e)}
+            title="Delete Song"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
       <div className="song-meta-badges">
         <span className="badge badge-primary">{song.tuning}</span>
@@ -3066,14 +3129,32 @@ const App: React.FC = () => {
 
   return (
     <div className="dashboard-container">
+      {/* Mobile Sidebar Backdrop Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="mobile-sidebar-backdrop"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* ====================================================================
          LEFT SIDEBAR: SONG DIRECTORY, FOLDERS & BACKUP/RESTORE
          ==================================================================== */}
-      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <Disc size={28} color="var(--primary)" />
-            <h1>BassFret</h1>
+          <div className="sidebar-logo" style={{ justifyContent: 'space-between', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Disc size={28} color="var(--primary)" />
+              <h1>BassFret</h1>
+            </div>
+            <button
+              type="button"
+              className="btn-icon mobile-sidebar-close-btn"
+              onClick={() => setIsSidebarOpen(false)}
+              title="Close Song Library"
+            >
+              <X size={18} />
+            </button>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
             <button 
@@ -3312,18 +3393,62 @@ const App: React.FC = () => {
             {/* Top Song Info & 3-Mode Switcher Header (Frozen at Top) */}
             <header className="workbench-header">
               <div className="workbench-header-top">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div className="workbench-header-title-row">
                   <button
-                    className="btn btn-secondary"
-                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                    style={{ padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title={isSidebarCollapsed ? "Expand Song Library Sidebar" : "Collapse Song Library Sidebar"}
+                    type="button"
+                    className="btn btn-secondary sidebar-toggle-btn"
+                    onClick={handleToggleSidebarMenu}
+                    title="Open Song Library & Menu"
                   >
-                    {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                    <Menu size={17} className="mobile-menu-icon" />
+                    <span className="desktop-collapse-icon">
+                      {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                    </span>
+                    <span className="mobile-menu-label">Songs</span>
                   </button>
+
                   <div className="song-info-panel">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div className="song-title-bar">
                       <h2>{selectedSong.title}</h2>
+
+                      {/* Mobile 1-Tap Quick Song Switcher Dropdown */}
+                      {songs.length > 1 && (
+                        <select
+                          className="mobile-song-switcher"
+                          value={selectedSong.id}
+                          onChange={(e) => {
+                            if (e.target.value) fetchSongDetails(e.target.value);
+                          }}
+                          aria-label="Switch Song"
+                          title="Quick Switch Song"
+                        >
+                          {folders.map(folder => {
+                            const fSongs = songs.filter(s => s.folder_id === folder.id);
+                            if (fSongs.length === 0) return null;
+                            return (
+                              <optgroup key={folder.id} label={`📁 ${folder.name}`}>
+                                {fSongs.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.title} — {s.artist}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                          {songs.some(s => !s.folder_id) && (
+                            <optgroup label={folders.length > 0 ? '🎵 Uncategorized' : '🎵 Songs'}>
+                              {songs
+                                .filter(s => !s.folder_id)
+                                .map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.title} — {s.artist}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      )}
+
                       {activeMode !== 'play' && (
                         <button 
                           className="btn-icon" 
@@ -3333,6 +3458,33 @@ const App: React.FC = () => {
                           <Edit3 size={14} />
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn btn-secondary copy-link-btn"
+                        onClick={() => handleCopySongLink(selectedSong.id)}
+                        title="Copy a direct link to this song"
+                        style={{
+                          padding: '0.22rem 0.6rem',
+                          fontSize: '0.73rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          borderColor: copiedSongLinkId === selectedSong.id ? '#34d399' : undefined,
+                          color: copiedSongLinkId === selectedSong.id ? '#6ee7b7' : undefined,
+                          background: copiedSongLinkId === selectedSong.id ? 'rgba(16, 185, 129, 0.16)' : undefined
+                        }}
+                      >
+                        {copiedSongLinkId === selectedSong.id ? (
+                          <>
+                            <Check size={13} /> <span className="copy-link-text">Link Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Link2 size={13} /> <span className="copy-link-text">Copy Link</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                     <div className="song-meta-badges" style={{ marginTop: '0.35rem' }}>
                       <span className="badge">{selectedSong.artist}</span>
@@ -3352,21 +3504,21 @@ const App: React.FC = () => {
                     className={`mode-segment-btn ${activeMode === 'teach' ? 'active-teach' : ''}`}
                     title="Teach Mode: Create and practice raw lesson widgets in one unified section"
                   >
-                    <BookOpen size={14} /> Teach Mode
+                    <BookOpen size={14} /> <span>Teach Mode</span>
                   </button>
                   <button
                     onClick={() => handleSwitchMode('edit')}
                     className={`mode-segment-btn ${activeMode === 'edit' ? 'active-edit' : ''}`}
                     title="Edit Mode: Construct the song through sections, link Teach Mode widgets, and add lyrics"
                   >
-                    <Layers size={14} /> Edit Mode
+                    <Layers size={14} /> <span>Edit Mode</span>
                   </button>
                   <button
                     onClick={() => handleSwitchMode('play')}
                     className={`mode-segment-btn ${activeMode === 'play' ? 'active-play' : ''}`}
                     title="Play Mode: Stream the constructed song live from top to bottom"
                   >
-                    <Eye size={14} /> Play Mode
+                    <Eye size={14} /> <span>Play Mode</span>
                   </button>
                 </div>
               </div>
@@ -3374,47 +3526,44 @@ const App: React.FC = () => {
               {/* Frozen Second Row in Top Header for Teach Mode: Add Lesson Widget + Filter Pills */}
               {activeMode === 'teach' && (
                 <div className="teach-frozen-toolbar">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>
-                      + Add Widget:
+                  <div className="teach-add-widget-strip">
+                    <span className="teach-add-label">
+                      + Add:
                     </span>
-                    <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('fret_board')}>
-                      <Sliders size={14} style={{ color: 'var(--primary)' }} /> Fret Board Graph
+                    <button className="btn btn-secondary teach-add-btn" onClick={() => handleAddTeachWidget('fret_board')}>
+                      <Sliders size={14} style={{ color: 'var(--primary)' }} /> <span>Fret Board</span>
                     </button>
-                    <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('roman_numeral')}>
-                      <Hash size={14} style={{ color: 'var(--accent-amber)' }} /> Roman Chord Map
+                    <button className="btn btn-secondary teach-add-btn" onClick={() => handleAddTeachWidget('roman_numeral')}>
+                      <Hash size={14} style={{ color: 'var(--accent-amber)' }} /> <span>Chord Map</span>
                     </button>
-                    <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('rhythm')}>
-                      <Activity size={14} style={{ color: 'var(--accent-green)' }} /> Rhythm Sequencer
+                    <button className="btn btn-secondary teach-add-btn" onClick={() => handleAddTeachWidget('rhythm')}>
+                      <Activity size={14} style={{ color: 'var(--accent-green)' }} /> <span>Rhythm</span>
                     </button>
                     <button
-                      className="btn btn-secondary"
+                      className="btn btn-secondary teach-add-btn"
                       style={{
-                        padding: '0.4rem 0.75rem',
-                        fontSize: '0.8rem',
                         borderColor: 'rgba(249, 115, 22, 0.45)',
                         color: '#fed7aa'
                       }}
                       onClick={() => handleAddTeachWidget('helix_tone')}
                       title="Add a Line 6 HX Stomp Tone & Pedal Chain widget (polls the internet for Bass or Guitar rig)"
                     >
-                      <Sparkles size={14} style={{ color: '#fb923c' }} /> HX Stomp Tone
+                      <Sparkles size={14} style={{ color: '#fb923c' }} /> <span>HX Stomp Tone</span>
                     </button>
-                    <button className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleAddTeachWidget('note')}>
-                      <AlignLeft size={14} style={{ color: 'var(--secondary)' }} /> Notes Notepad
+                    <button className="btn btn-secondary teach-add-btn" onClick={() => handleAddTeachWidget('note')}>
+                      <AlignLeft size={14} style={{ color: 'var(--secondary)' }} /> <span>Notes</span>
                     </button>
                   </div>
 
                   {/* Filter pills */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', marginRight: '0.25rem' }}>
+                  <div className="teach-filter-strip">
+                    <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', flexShrink: 0 }}>
                       {selectedSong.widgets.length} {selectedSong.widgets.length === 1 ? 'widget' : 'widgets'}
                     </span>
                     {(['all', 'fret_board', 'roman_numeral', 'rhythm', 'helix_tone', 'note'] as const).map(filterKey => (
                       <button
                         key={filterKey}
-                        className={`btn ${teachWidgetFilter === filterKey ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.73rem' }}
+                        className={`btn ${teachWidgetFilter === filterKey ? 'btn-primary' : 'btn-secondary'} teach-filter-pill`}
                         onClick={() => setTeachWidgetFilter(filterKey)}
                       >
                         {filterKey === 'all' && 'All'}
@@ -5636,12 +5785,28 @@ const App: React.FC = () => {
             )}
           </>
         ) : (
-          <div className="empty-state" style={{ margin: 'auto' }}>
+          <div className="empty-state" style={{ margin: 'auto', padding: '1.5rem', textAlign: 'center' }}>
             <div className="empty-state-icon">
               <Music size={28} />
             </div>
             <h3>Select or Create a Song</h3>
-            <p>Choose a song from the left library to open the Bass Workbench.</p>
+            <p style={{ marginBottom: '1rem' }}>Choose a song from the library to open the Bass Workbench.</p>
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <Menu size={16} /> Open Song Library
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsNewSongModalOpen(true)}
+              >
+                <Plus size={16} /> Add New Song
+              </button>
+            </div>
           </div>
         )}
       </main>

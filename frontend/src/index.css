@@ -235,23 +235,30 @@ h1, h2, h3, h4, h5, h6 {
 .app-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
+  position: relative;
 }
 
-/* Mobile responsive menu */
-.menu-toggle {
+.mobile-sidebar-backdrop {
   display: none;
-  background: var(--bg-slate-900);
-  border: 1px solid var(--glass-border);
-  color: var(--text-main);
-  padding: 0.5rem;
-  border-radius: var(--radius-md);
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  z-index: 100;
-  cursor: pointer;
+}
+
+.mobile-sidebar-close-btn {
+  display: none;
+}
+
+.mobile-menu-icon,
+.mobile-menu-label,
+.mobile-song-switcher {
+  display: none;
+}
+
+.desktop-collapse-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Sidebar Styling */
@@ -259,19 +266,20 @@ h1, h2, h3, h4, h5, h6 {
   width: 320px;
   height: 100%;
   max-height: 100vh;
+  max-height: 100dvh;
   overflow: hidden;
-  background: rgba(10, 12, 20, 0.8);
+  background: rgba(10, 12, 20, 0.96);
   backdrop-filter: blur(20px);
   border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  z-index: 50;
+  z-index: 150;
   transition: width var(--transition-normal), transform var(--transition-normal), opacity var(--transition-normal);
 }
 
 .sidebar-header {
-  padding: 1.5rem;
+  padding: 1.25rem 1.25rem 1rem;
   border-bottom: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
@@ -299,6 +307,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .song-item {
@@ -350,6 +359,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .song-meta-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.25rem;
 }
@@ -362,6 +372,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-muted);
   border: 1px solid rgba(255, 255, 255, 0.03);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .badge-primary {
@@ -379,19 +390,22 @@ h1, h2, h3, h4, h5, h6 {
 /* Main Workbench panel */
 .workbench {
   flex: 1;
+  min-width: 0;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  -webkit-overflow-scrolling: touch;
 }
 
 .workbench-header {
-  padding: 1.15rem 2rem;
+  padding: 1rem 1.75rem;
   border-bottom: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  background: rgba(9, 11, 16, 0.92);
+  gap: 0.75rem;
+  background: rgba(9, 11, 16, 0.94);
   backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
@@ -403,27 +417,46 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.85rem;
   width: 100%;
 }
 
-.teach-frozen-toolbar {
+.workbench-header-title-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-toggle-btn {
+  padding: 0.45rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.song-info-panel {
+  min-width: 0;
+  flex: 1;
+}
+
+.song-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  width: 100%;
 }
 
 .song-info-panel h2 {
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   color: var(--text-main);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  line-height: 1.2;
 }
 
 .song-info-panel p {
@@ -431,11 +464,60 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.9rem;
 }
 
+.teach-frozen-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+}
+
+.teach-add-widget-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.teach-add-label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 0.15rem;
+  white-space: nowrap;
+}
+
+.teach-add-btn {
+  padding: 0.38rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.teach-filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.teach-filter-pill {
+  padding: 0.28rem 0.58rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .workbench-content {
-  padding: 2rem;
+  padding: 1.75rem 2rem;
   display: flex;
   flex-direction: column;
-  gap: 2.5rem;
+  gap: 2rem;
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
@@ -647,10 +729,48 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Responsive constraints */
+/* Responsive Mobile-First & Tablet Constraints */
 @media (max-width: 968px) {
-  .menu-toggle {
-    display: flex;
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 7, 12, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 140;
+    animation: fadeIn 0.18s ease-out;
+  }
+
+  .mobile-sidebar-close-btn {
+    display: inline-flex;
+  }
+
+  .mobile-menu-icon {
+    display: inline-block;
+    color: var(--primary);
+  }
+
+  .mobile-menu-label {
+    display: inline;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .desktop-collapse-icon {
+    display: none;
+  }
+
+  .mobile-song-switcher {
+    display: inline-block;
+    max-width: 165px;
+    padding: 0.24rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: rgba(99, 102, 241, 0.16);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: var(--radius-sm);
+    outline: none;
   }
 
   .sidebar {
@@ -658,11 +778,17 @@ h1, h2, h3, h4, h5, h6 {
     left: 0;
     top: 0;
     bottom: 0;
-    transform: translateX(-100%);
+    width: min(86vw, 330px);
+    transform: translateX(-105%);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.75);
   }
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  .folder-actions {
+    opacity: 1 !important;
   }
 
   .workbench {
@@ -670,12 +796,136 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .workbench-header {
-    padding: 1rem;
-    padding-left: 5rem; /* Allow space for toggle menu */
+    padding: 0.7rem 0.85rem;
+    gap: 0.55rem;
+  }
+
+  .workbench-header-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .workbench-header-title-row {
+    align-items: flex-start;
+    gap: 0.6rem;
+    width: 100%;
+  }
+
+  .sidebar-toggle-btn {
+    padding: 0.42rem 0.65rem;
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #e0e7ff;
+  }
+
+  .song-info-panel h2 {
+    font-size: 1.15rem;
+    word-break: break-word;
+  }
+
+  .song-meta-badges {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .song-meta-badges::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mode-segmented-control {
+    width: 100%;
+    display: flex;
+  }
+
+  .mode-segment-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.42rem 0.5rem;
+    font-size: 0.76rem;
+  }
+
+  .teach-frozen-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding-top: 0.55rem;
+  }
+
+  .teach-add-widget-strip,
+  .teach-filter-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .teach-add-widget-strip::-webkit-scrollbar,
+  .teach-filter-strip::-webkit-scrollbar {
+    display: none;
   }
 
   .workbench-content {
-    padding: 1rem;
+    padding: 0.85rem 0.75rem 2.5rem;
+    gap: 1.15rem;
+  }
+
+  .widget-card {
+    padding: 0.9rem;
+  }
+
+  .edit-part-card {
+    padding: 0.9rem;
+  }
+
+  .edit-part-card.collapsed {
+    padding: 0.75rem 0.9rem;
+  }
+
+  .hfc-chart-box {
+    padding: 0.75rem;
+  }
+
+  .chord-teach-drawer {
+    padding: 0.8rem;
+  }
+
+  .play-stream-hud {
+    position: relative;
+    top: auto;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .play-stream-section {
+    padding: 0.95rem;
+  }
+
+  .modal-overlay {
+    padding: 0.65rem;
+  }
+
+  .modal-content {
+    padding: 1.15rem;
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .copy-link-text {
+    display: none;
+  }
+
+  .copy-link-btn {
+    padding: 0.3rem 0.45rem !important;
+  }
+
+  .mobile-song-switcher {
+    max-width: 130px;
   }
 }
 
